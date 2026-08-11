@@ -1,4 +1,10 @@
-export type MarketType = "OVER_2" | "UNDER_7";
+export type MarketType =
+  | "OVER_2"
+  | "UNDER_7"
+  | "EVEN"
+  | "ODD"
+  | "MATCHES"
+  | "DIFFERS";
 
 export interface DigitAnalysis {
   digit: number;
@@ -8,8 +14,7 @@ export interface DigitAnalysis {
 
 export interface PredictionResult {
   market: MarketType;
-  prediction1: number;
-  prediction2: number;
+  prediction: string;
   confidence: number;
   valid: boolean;
   reason: string;
@@ -24,7 +29,11 @@ export class DerivAnalysisEngine {
   constructor(private maxTicks = 100) {}
 
   addTick(digit: number) {
-    if (digit < 0 || digit > 9 || !Number.isInteger(digit)) {
+    if (
+      !Number.isInteger(digit) ||
+      digit < 0 ||
+      digit > 9
+    ) {
       return;
     }
 
@@ -55,79 +64,76 @@ export class DerivAnalysisEngine {
     return counts.map((count, digit) => ({
       digit,
       count,
-      percentage: total > 0 ? (count / total) * 100 : 0,
+      percentage:
+        total > 0 ? (count / total) * 100 : 0,
     }));
   }
 
-  analyze(market: MarketType): PredictionResult {
+  analyze(
+    market: MarketType,
+    selectedDigit?: number
+  ): PredictionResult {
     const statistics = this.getStatistics();
+
+    const marketRules =
+      this.getMarketRules(market, selectedDigit);
 
     if (this.ticks.length === 0) {
       return {
         market,
-        prediction1: market === "OVER_2" ? 2 : 7,
-        prediction2: market === "OVER_2" ? 2 : 7,
+        prediction: marketRules.defaultPrediction,
         confidence: 0,
         valid: false,
         reason: "Waiting for market data",
-        losingDigits: market === "OVER_2" ? [0, 1, 2] : [7, 8, 9],
-        winningDigits: market === "OVER_2"
-          ? [3, 4, 5, 6, 7, 8, 9]
-          : [0, 1, 2, 3, 4, 5, 6],
+        losingDigits: marketRules.losingDigits,
+        winningDigits: marketRules.winningDigits,
         statistics,
       };
     }
 
-    const losingDigits =
-      market === "OVER_2"
-        ? [0, 1, 2]
-        : [7, 8, 9];
-
-    const winningDigits =
-      market === "OVER_2"
-        ? [3, 4, 5, 6, 7, 8, 9]
-        : [0, 1, 2, 3, 4, 5, 6];
-
-    const losingStats = losingDigits.map(
+    const losingStats = marketRules.losingDigits.map(
       (digit) => statistics[digit]
     );
 
-    const invalid = losingStats.some(
-      (stat) => stat.percentage > 10.5
+    const averageLosingPercentage =
+      losingStats.length > 0
+        ? losingStats.reduce(
+            (sum, stat) => sum + stat.percentage,
+            0
+          ) / losingStats.length
+        : 0;
+
+    const maxLosingPercentage =
+      losingStats.length > 0
+        ? Math.max(
+            ...losingStats.map(
+              (stat) => stat.percentage
+            )
+          )
+        : 0;
+
+    const sampleSizeFactor = Math.min(
+      this.ticks.length / 100,
+      1
     );
 
-    const nextDigit =
-      market === "OVER_2" ? 3 : 6;
-
-    const nextDigitPercentage =
-      statistics[nextDigit]?.percentage ?? 0;
-
-    let prediction1: number;
-    let prediction2: number;
-
-    if (nextDigitPercentage < 10) {
-      prediction1 = market === "OVER_2" ? 2 : 7;
-      prediction2 = nextDigit;
-    } else {
-      prediction1 = market === "OVER_2" ? 2 : 7;
-      prediction2 = market === "OVER_2" ? 2 : 7;
-    }
-
-    const averageLosingPercentage =
-      losingStats.reduce(
-        (sum, stat) => sum + stat.percentage,
-        0
-      ) / losingStats.length;
-
     let confidence =
-      100 - averageLosingPercentage * 2;
+      50 +
+      (50 - averageLosingPercentage * 2) *
+        sampleSizeFactor;
 
-    if (nextDigitPercentage < 10) {
-      confidence += 5;
+    if (market === "MATCHES" && selectedDigit !== undefined) {
+      const matchPercentage =
+        statistics[selectedDigit].percentage;
+
+      confidence = matchPercentage * 3;
     }
 
-    if (invalid) {
-      confidence -= 20;
+    if (market === "DIFFERS" && selectedDigit !== undefined) {
+      const matchPercentage =
+        statistics[selectedDigit].percentage;
+
+      confidence = 100 - matchPercentage * 3;
     }
 
     confidence = Math.max(
@@ -135,18 +141,94 @@ export class DerivAnalysisEngine {
       Math.min(99, Math.round(confidence))
     );
 
+    const invalid =
+      maxLosingPercentage > 10.5;
+
+    if (invalid) {
+      confidence = Math.max(
+        0,
+        confidence - 20
+      );
+    }
+
     return {
       market,
-      prediction1,
-      prediction2,
+      prediction: marketRules.defaultPrediction,
       confidence,
       valid: !invalid,
       reason: invalid
-        ? "Market invalid: one or more losing digits are above 10.5%"
+        ? "Market conditions are weak"
         : "Market conditions acceptable",
-      losingDigits,
-      winningDigits,
+      losingDigits: marketRules.losingDigits,
+      winningDigits: marketRules.winningDigits,
       statistics,
     };
+  }
+
+  private getMarketRules(
+    market: MarketType,
+    selectedDigit?: number
+  ) {
+    switch (market) {
+      case "OVER_2":
+        return {
+          defaultPrediction: "OVER 2",
+          losingDigits: [0, 1, 2],
+          winningDigits: [3, 4, 5, 6, 7, 8, 9],
+        };
+
+      case "UNDER_7":
+        return {
+          defaultPrediction: "UNDER 7",
+          losingDigits: [7, 8, 9],
+          winningDigits: [0, 1, 2, 3, 4, 5, 6],
+        };
+
+      case "EVEN":
+        return {
+          defaultPrediction: "EVEN",
+          losingDigits: [1, 3, 5, 7, 9],
+          winningDigits: [0, 2, 4, 6, 8],
+        };
+
+      case "ODD":
+        return {
+          defaultPrediction: "ODD",
+          losingDigits: [0, 2, 4, 6, 8],
+          winningDigits: [1, 3, 5, 7, 9],
+        };
+
+      case "MATCHES": {
+        const digit =
+          selectedDigit !== undefined
+            ? selectedDigit
+            : 0;
+
+        return {
+          defaultPrediction: `MATCHES ${digit}`,
+          losingDigits: Array.from(
+            { length: 10 },
+            (_, i) => i
+          ).filter((i) => i !== digit),
+          winningDigits: [digit],
+        };
+      }
+
+      case "DIFFERS": {
+        const digit =
+          selectedDigit !== undefined
+            ? selectedDigit
+            : 0;
+
+        return {
+          defaultPrediction: `DIFFERS ${digit}`,
+          losingDigits: [digit],
+          winningDigits: Array.from(
+            { length: 10 },
+            (_, i) => i
+          ).filter((i) => i !== digit),
+        };
+      }
+    }
   }
 }
