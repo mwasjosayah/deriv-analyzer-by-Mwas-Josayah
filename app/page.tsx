@@ -1,124 +1,73 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import MarketCard from "../components/MarketCard";
-import TopSignals from "../components/TopSignals";
-import DigitStats from "../components/DigitStats";
-import RecentTicks from "../components/RecentTicks";
-import SignalHistory from "../components/SignalHistory";
-import { DerivAnalysisEngine } from "../lib/deriv-engine";
-import { DerivDataManager } from "../lib/deriv-data";
+import { useState } from "react";
+import MarketSelector, {
+  MarketCategory,
+  MarketType,
+} from "../components/MarketSelector";
 
 export default function Home() {
-  const [ticks, setTicks] = useState<number[]>([]);
-  const [engine] = useState(() => new DerivAnalysisEngine(100));
-  const [dataManager] = useState(
-    () => new DerivDataManager(engine)
-  );
+  const [category, setCategory] =
+    useState<MarketCategory>("VOLATILITY");
 
-  useEffect(() => {
-    const unsubscribe = dataManager.onDigit((digit) => {
-      setTicks(dataManager.getEngine().getTicks());
-    });
+  const [symbol, setSymbol] =
+    useState("R_75");
 
-    dataManager.connect("R_100");
+  const [marketType, setMarketType] =
+    useState<MarketType>("OVER_2");
 
-    return () => {
-      unsubscribe();
-      dataManager.disconnect();
+  const [selectedDigit, setSelectedDigit] =
+    useState(0);
+
+  const handleCategoryChange = (
+    newCategory: MarketCategory
+  ) => {
+    setCategory(newCategory);
+
+    const defaultSymbols = {
+      VOLATILITY: "R_75",
+      VOLATILITY_1S: "1HZ75V",
+      JUMP: "JD75",
     };
-  }, [dataManager]);
 
-  const over2 = engine.analyze("OVER_2");
-  const under7 = engine.analyze("UNDER_7");
-  const even = engine.analyze("EVEN");
-  const odd = engine.analyze("ODD");
-  const matches = engine.analyze("MATCHES", 5);
-  const differs = engine.analyze("DIFFERS", 5);
+    setSymbol(defaultSymbols[newCategory]);
+  };
 
   return (
     <main className="dashboard">
       <header className="dashboard-header">
         <div>
           <h1>Deriv Analysis</h1>
-          <p>Market analysis and prediction dashboard</p>
-        </div>
-
-        <div className="connection-status">
-          <span className="status-dot"></span>
-          LIVE
+          <p>
+            Real-time market analysis and predictions
+          </p>
         </div>
       </header>
 
-      <section className="market-grid">
-        <MarketCard
-          market="Over 2"
-          symbol="R_100"
-          prediction={over2.prediction}
-          confidence={over2.confidence}
-          status={over2.valid ? "BUY" : "WAIT"}
-        />
+      <MarketSelector
+        category={category}
+        symbol={symbol}
+        marketType={marketType}
+        selectedDigit={selectedDigit}
+        onCategoryChange={handleCategoryChange}
+        onSymbolChange={setSymbol}
+        onMarketTypeChange={setMarketType}
+        onSelectedDigitChange={setSelectedDigit}
+      />
 
-        <MarketCard
-          market="Under 7"
-          symbol="R_100"
-          prediction={under7.prediction}
-          confidence={under7.confidence}
-          status={under7.valid ? "BUY" : "WAIT"}
-        />
+      <section className="dashboard-placeholder">
+        <h2>Analysis Dashboard</h2>
 
-        <MarketCard
-          market="Even"
-          symbol="R_100"
-          prediction={even.prediction}
-          confidence={even.confidence}
-          status={even.valid ? "BUY" : "WAIT"}
-        />
+        <p>
+          Selected Market:{" "}
+          <strong>{symbol}</strong>
+        </p>
 
-        <MarketCard
-          market="Odd"
-          symbol="R_100"
-          prediction={odd.prediction}
-          confidence={odd.confidence}
-          status={odd.valid ? "BUY" : "WAIT"}
-        />
-
-        <MarketCard
-          market="Matches 5"
-          symbol="R_100"
-          prediction={matches.prediction}
-          confidence={matches.confidence}
-          status={matches.valid ? "BUY" : "WAIT"}
-        />
-
-        <MarketCard
-          market="Differs 5"
-          symbol="R_100"
-          prediction={differs.prediction}
-          confidence={differs.confidence}
-          status={differs.valid ? "BUY" : "WAIT"}
-        />
+        <p>
+          Analysis Type:{" "}
+          <strong>{marketType}</strong>
+        </p>
       </section>
-
-      <section className="dashboard-section">
-        <TopSignals />
-      </section>
-
-      <section className="dashboard-section">
-        <DigitStats statistics={over2.statistics} />
-      </section>
-
-      <section className="dashboard-section">
-        <RecentTicks ticks={ticks} />
-      </section>
-
-      <section className="dashboard-section">
-        <SignalHistory />
-      </section>
-
-      <footer className="dashboard-footer">
-        <p>Analysis made by Mwas Josayah</p>
-      </footer>
     </main>
   );
 }
