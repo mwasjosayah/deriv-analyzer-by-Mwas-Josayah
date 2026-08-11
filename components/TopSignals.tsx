@@ -1,40 +1,57 @@
-<TopSignals
-  signals={[
-    {
-      market: "Over 2",
-      prediction: over2.prediction,
-      confidence: over2.confidence,
-      status: over2.valid ? "BUY" : "WAIT",
-    },
-    {
-      market: "Under 7",
-      prediction: under7.prediction,
-      confidence: under7.confidence,
-      status: under7.valid ? "BUY" : "WAIT",
-    },
-    {
-      market: "Even",
-      prediction: even.prediction,
-      confidence: even.confidence,
-      status: even.valid ? "BUY" : "WAIT",
-    },
-    {
-      market: "Odd",
-      prediction: odd.prediction,
-      confidence: odd.confidence,
-      status: odd.valid ? "BUY" : "WAIT",
-    },
-    {
-      market: "Matches 5",
-      prediction: matches.prediction,
-      confidence: matches.confidence,
-      status: matches.valid ? "BUY" : "WAIT",
-    },
-    {
-      market: "Differs 5",
-      prediction: differs.prediction,
-      confidence: differs.confidence,
-      status: differs.valid ? "BUY" : "WAIT",
-    },
-  ]}
-/>
+"use client";
+
+interface Signal {
+  market: string;
+  prediction: string;
+  confidence: number;
+  status: "BUY" | "SELL" | "WAIT";
+}
+
+interface TopSignalsProps {
+  signals: Signal[];
+}
+
+export default function TopSignals({
+  signals,
+}: TopSignalsProps) {
+  return (
+    <section className="top-signals">
+      <div className="section-header">
+        <div>
+          <h2>Top Signals</h2>
+          <p>Highest-confidence market predictions</p>
+        </div>
+      </div>
+
+      <div className="signals-list">
+        {signals.length === 0 ? (
+          <div className="empty-state">
+            No signals available yet.
+          </div>
+        ) : (
+          signals.map((signal, index) => (
+            <div
+              className="signal-row"
+              key={`${signal.market}-${index}`}
+            >
+              <div className="signal-market">
+                <strong>{signal.market}</strong>
+                <span>{signal.prediction}</span>
+              </div>
+
+              <div
+                className={`signal-status ${signal.status.toLowerCase()}`}
+              >
+                {signal.status}
+              </div>
+
+              <div className="signal-confidence">
+                <strong>{signal.confidence}%</strong>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
