@@ -1,54 +1,52 @@
 "use client";
 
-interface SignalHistoryItem {
-  time: string;
+interface Signal {
   market: string;
   prediction: string;
   confidence: number;
-  result: "WIN" | "LOSS" | "PENDING";
+  status: "BUY" | "SELL" | "WAIT";
 }
 
 interface SignalHistoryProps {
-  history: SignalHistoryItem[];
+  signals: Signal[];
 }
 
 export default function SignalHistory({
-  history,
+  signals,
 }: SignalHistoryProps) {
   return (
     <section className="signal-history">
       <div className="section-header">
         <div>
           <h2>Signal History</h2>
-          <p>Previous predictions and results</p>
+          <p>Previous market analysis signals</p>
         </div>
       </div>
 
       <div className="history-list">
-        {history.length === 0 ? (
+        {signals.length === 0 ? (
           <div className="empty-state">
-            No signal history yet.
+            No signal history available yet.
           </div>
         ) : (
-          history.map((item, index) => (
-            <div className="history-row" key={`${item.time}-${index}`}>
-              <div className="history-time">
-                {item.time}
-              </div>
-
+          signals.map((signal, index) => (
+            <div
+              className="history-row"
+              key={`${signal.market}-${index}`}
+            >
               <div className="history-market">
-                <strong>{item.market}</strong>
-                <span>{item.prediction}</span>
-              </div>
-
-              <div className="history-confidence">
-                {item.confidence}%
+                <strong>{signal.market}</strong>
+                <span>{signal.prediction}</span>
               </div>
 
               <div
-                className={`history-result ${item.result.toLowerCase()}`}
+                className={`signal-status ${signal.status.toLowerCase()}`}
               >
-                {item.result}
+                {signal.status}
+              </div>
+
+              <div className="history-confidence">
+                {signal.confidence}%
               </div>
             </div>
           ))
