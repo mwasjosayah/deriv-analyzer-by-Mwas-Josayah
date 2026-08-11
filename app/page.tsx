@@ -1,37 +1,49 @@
 "use client";
 
-import { useState } from "react";
-import MarketSelector, {
-  MarketCategory,
-  MarketType,
-} from "../components/MarketSelector";
+import { useEffect, useMemo, useState } from "react";
+
+import MarketCard from "../components/MarketCard";
+import TopSignals from "../components/TopSignals";
+import DigitStats from "../components/DigitStats";
+import RecentTicks from "../components/RecentTicks";
+import SignalHistory from "../components/SignalHistory";
+
+import { DerivDataManager } from "../lib/deriv-data";
+
+const DEFAULT_SYMBOL = "R_100";
 
 export default function Home() {
-  const [category, setCategory] =
-    useState<MarketCategory>("VOLATILITY");
+  const [digits, setDigits] = useState<number[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
 
-  const [symbol, setSymbol] =
-    useState("R_75");
+  const dataManager = useMemo(
+    () =>
+      new DerivDataManager({
+        maxTicks: 500,
+      }),
+    []
+  );
 
-  const [marketType, setMarketType] =
-    useState<MarketType>("OVER_2");
+  useEffect(() => {
+    dataManager.connect(DEFAULT_SYMBOL);
 
-  const [selectedDigit, setSelectedDigit] =
-    useState(0);
+    const unsubscribe = dataManager.onDigit((digit) => {
+      setDigits((previous) => {
+        const updated = [...previous, digit];
 
-  const handleCategoryChange = (
-    newCategory: MarketCategory
-  ) => {
-    setCategory(newCategory);
+        return updated.slice(-500);
+      });
 
-    const defaultSymbols = {
-      VOLATILITY: "R_75",
-      VOLATILITY_1S: "1HZ75V",
-      JUMP: "JD75",
+      setIsConnected(true);
+    });
+
+    return () => {
+      unsubscribe();
+      dataManager.disconnect();
     };
+  }, [dataManager]);
 
-    setSymbol(defaultSymbols[newCategory]);
-  };
+  const latestDigits = digits.slice(-20);
 
   return (
     <main className="dashboard">
@@ -39,35 +51,135 @@ export default function Home() {
         <div>
           <h1>Deriv Analysis</h1>
           <p>
-            Real-time market analysis and predictions
+            Live market analysis and prediction dashboard
           </p>
+        </div>
+
+        <div
+          className={`connection-status ${
+            isConnected ? "connected" : "disconnected"
+          }`}
+        >
+          <span className="status-dot" />
+          {isConnected ? "Live" : "Connecting..."}
         </div>
       </header>
 
-      <MarketSelector
-        category={category}
-        symbol={symbol}
-        marketType={marketType}
-        selectedDigit={selectedDigit}
-        onCategoryChange={handleCategoryChange}
-        onSymbolChange={setSymbol}
-        onMarketTypeChange={setMarketType}
-        onSelectedDigitChange={setSelectedDigit}
+      <section className="market-selector">
+        <div>
+          <span className="selector-label">
+            Market
+          </span>
+
+          <select defaultValue={DEFAULT_SYMBOL}>
+            <option value="R_100">
+              Volatility 100 Index
+            </option>
+
+            <option value="R_75">
+              Volatility 75 Index
+            </option>
+
+            <option value="R_50">
+              Volatility 50 Index
+            </option>
+
+            <option value="R_25">
+              Volatility 25 Index
+            </option>
+
+            <option value="R_10">
+              Volatility 10 Index
+            </option>
+
+            <option value="1HZ100V">
+              Volatility 100 (1s) Index
+            </option>
+
+            <option value="1HZ75V">
+              Volatility 75 (1s) Index
+            </option>
+
+            <option value="1HZ50V">
+              Volatility 50 (1s) Index
+            </option>
+
+            <option value="1HZ25V">
+              Volatility 25 (1s) Index
+            </option>
+
+            <option value="1HZ10V">
+              Volatility 10 (1s) Index
+            </option>
+          </select>
+        </div>
+      </section>
+
+      <section className="market-grid">
+        <MarketCard
+          market="Over 2"
+          symbol="Volatility 100 Index"
+          prediction="OVER 2"
+          confidence={0}
+          status="WAIT"
+        />
+
+        <MarketCard
+          market="Under 7"
+          symbol="Volatility 100 Index"
+          prediction="UNDER 7"
+          confidence={0}
+          status="WAIT"
+        />
+
+        <MarketCard
+          market="Even"
+          symbol="Volatility 100 Index"
+          prediction="EVEN"
+          confidence={0}
+          status="WAIT"
+        />
+
+        <MarketCard
+          market="Odd"
+          symbol="Volatility 100 Index"
+          prediction="ODD"
+          confidence={0}
+          status="WAIT"
+        />
+
+        <MarketCard
+          market="Matches"
+          symbol="Volatility 100 Index"
+          prediction="MATCHES"
+          confidence={0}
+          status="WAIT"
+        />
+
+        <MarketCard
+          market="Differs"
+          symbol="Volatility 100 Index"
+          prediction="DIFFERS"
+          confidence={0}
+          status="WAIT"
+        />
+      </section>
+
+      <TopSignals signals={[]} />
+
+      <DigitStats
+        digits={Array.from({ length: 10 }, (_, digit) =>
+          digits.filter((value) => value === digit).length
+        )}
       />
 
-      <section className="dashboard-placeholder">
-        <h2>Analysis Dashboard</h2>
+      <RecentTicks digits={latestDigits} />
 
-        <p>
-          Selected Market:{" "}
-          <strong>{symbol}</strong>
-        </p>
+      <SignalHistory signals={[]} />
 
-        <p>
-          Analysis Type:{" "}
-          <strong>{marketType}</strong>
-        </p>
-      </section>
+      <footer className="dashboard-footer">
+        Analysis made by <strong>Mwas Josayah</strong>
+      </footer>
     </main>
   );
 }
