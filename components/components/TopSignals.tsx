@@ -1,0 +1,53 @@
+"use client";
+
+interface Signal {
+  market: string;
+  prediction: string;
+  confidence: number;
+  status: "BUY" | "SELL" | "WAIT";
+}
+
+interface TopSignalsProps {
+  signals: Signal[];
+}
+
+export default function TopSignals({ signals }: TopSignalsProps) {
+  return (
+    <section className="top-signals">
+      <div className="section-header">
+        <div>
+          <h2>Top Signals</h2>
+          <p>Highest-confidence market predictions</p>
+        </div>
+      </div>
+
+      <div className="signals-list">
+        {signals.length === 0 ? (
+          <div className="empty-state">
+            No signals available yet.
+          </div>
+        ) : (
+          signals.map((signal, index) => (
+            <div className="signal-row" key={`${signal.market}-${index}`}>
+              <div className="signal-market">
+                <strong>{signal.market}</strong>
+                <span>{signal.prediction}</span>
+              </div>
+
+              <div className="signal-confidence">
+                <strong>{signal.confidence}%</strong>
+                <span>confidence</span>
+              </div>
+
+              <div
+                className={`signal-status ${signal.status.toLowerCase()}`}
+              >
+                {signal.status}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+              }
