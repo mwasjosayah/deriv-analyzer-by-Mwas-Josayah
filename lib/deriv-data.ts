@@ -1,60 +1,31 @@
-export interface DerivTick {
-  symbol: string;
-  quote: number;
-  digit: number;
-  epoch: number;
-}
-
-export interface DerivDataManagerOptions {
-  symbol: string;
-  onTick?: (tick: DerivTick) => void;
-  onStatusChange?: (connected: boolean) => void;
-  onError?: (error: Error) => void;
-}
+import { DerivAnalysisEngine } from "./deriv-engine";
 
 export class DerivDataManager {
   private socket: WebSocket | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private shouldReconnect = true;
+  private engine: DerivAnalysisEngine;
+  private listeners: ((digit: number) => void)[] = [];
 
-  private readonly symbol: string;
-  private readonly onTick?: (tick: DerivTick) => void;
-  private readonly onStatusChange?: (
-    connected: boolean
-  ) => void;
-  private readonly onError?: (error: Error) => void;
-
-  constructor(options: DerivDataManagerOptions) {
-    this.symbol = options.symbol;
-    this.onTick = options.onTick;
-    this.onStatusChange = options.onStatusChange;
-    this.onError = options.onError;
+  constructor(engine?: DerivAnalysisEngine) {
+    this.engine = engine ?? new DerivAnalysisEngine(100);
   }
 
-  connect() {
+  connect(symbol: string) {
     if (typeof window === "undefined") {
       return;
     }
 
-    this.shouldReconnect = true;
-
-    if (
-      this.socket &&
-      this.socket.readyState === WebSocket.OPEN
-    ) {
-      return;
-    }
+    this.disconnect();
 
     this.socket = new WebSocket(
       "wss://ws.derivws.com/websockets/v3?app_id=1089"
     );
 
     this.socket.onopen = () => {
-      this.onStatusChange?.(true);
+      console.log("Connected to Deriv");
 
       this.socket?.send(
         JSON.stringify({
-          ticks: this.symbol,
+          ticks: symbol,
           subscribe: 1,
         })
       );
@@ -64,107 +35,60 @@ export class DerivDataManager {
       try {
         const data = JSON.parse(event.data);
 
-        if (data.error) {
-          this.onError?.(
-            new Error(data.error.message)
+        if (data.tick) {
+          const quote = String(data.tick.quote);
+
+          const digit = Number(
+            quote.replace(".", "").slice(-1)
           );
-          return;
+
+          if (
+            Number.isInteger(digit) &&
+            digit >= 0 &&
+            digit <= 9
+          ) {
+            this.engine.addTick(digit);
+
+            this.listeners.forEach((listener) =>
+              listener(digit)
+            );
+          }
         }
-
-        if (data.msg_type !== "tick") {
-          return;
-        }
-
-        const quote = Number(data.tick?.quote);
-
-        if (!Number.isFinite(quote)) {
-          return;
-        }
-
-        const digit = this.extractLastDigit(
-          quote
-        );
-
-        const tick: DerivTick = {
-          symbol:
-            data.tick?.symbol ?? this.symbol,
-          quote,
-          digit,
-          epoch: Number(
-            data.tick?.epoch ??
-              Math.floor(Date.now() / 1000)
-          ),
-        };
-
-        this.onTick?.(tick);
-      } catch {
-        this.onError?.(
-          new Error(
-            "Unable to process Deriv tick data."
-          )
+      } catch (error) {
+        console.error(
+          "Error processing Deriv data:",
+          error
         );
       }
     };
 
-    this.socket.onerror = () => {
-      this.onStatusChange?.(false);
-
-      this.onError?.(
-        new Error("Deriv WebSocket connection error.")
-      );
+    this.socket.onerror = (error) => {
+      console.error("Deriv WebSocket error:", error);
     };
 
     this.socket.onclose = () => {
-      this.onStatusChange?.(false);
-
-      if (this.shouldReconnect) {
-        this.scheduleReconnect();
-      }
+      console.log("Disconnected from Deriv");
     };
   }
 
   disconnect() {
-    this.shouldReconnect = false;
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
-
-    this.onStatusChange?.(false);
   }
 
-  private scheduleReconnect() {
-    if (this.reconnectTimer) {
-      return;
-    }
+  onDigit(listener: (digit: number) => void) {
+    this.listeners.push(listener);
 
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-
-      if (this.shouldReconnect) {
-        this.connect();
-      }
-    }, 3000);
+    return () => {
+      this.listeners = this.listeners.filter(
+        (item) => item !== listener
+      );
+    };
   }
 
-  private extractLastDigit(
-    quote: number
-  ): number {
-    const text = String(quote);
-
-    const digits = text.replace(
-      /\D/g,
-      ""
-    );
-
-    return Number(
-      digits.charAt(digits.length - 1)
-    );
+  getEngine() {
+    return this.engine;
   }
 }
