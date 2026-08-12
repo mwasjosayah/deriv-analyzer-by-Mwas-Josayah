@@ -117,8 +117,8 @@ export default function Home() {
     useState(false);
 
   /*
-   * Create a new analysis engine
-   * using the selected tick window.
+   * Create the analysis engine and
+   * Deriv data manager.
    */
   const dataManager = useMemo(() => {
     const engine =
@@ -129,25 +129,38 @@ export default function Home() {
 
   /*
    * Connect to the selected Deriv market.
+   *
+   * IMPORTANT:
+   * Listeners are registered BEFORE connect()
+   * so that we don't miss the initial status.
    */
   useEffect(() => {
+    let mounted = true;
+
     setIsConnected(false);
     setLatestDigits([]);
 
     /*
-     * Start the Deriv WebSocket connection.
-     */
-    dataManager.connect(
-      selectedMarket.symbol
-    );
-
-    /*
-     * Listen for connection status.
+     * Listen for WebSocket status BEFORE
+     * starting the connection.
      */
     const unsubscribeStatus =
       dataManager.onStatus((status) => {
+        if (!mounted) return;
+
+        console.log(
+          "[Dashboard] Deriv status:",
+          status
+        );
+
         if (status === "connected") {
           setIsConnected(true);
+        }
+
+        if (
+          status === "connecting"
+        ) {
+          setIsConnected(false);
         }
 
         if (
@@ -163,6 +176,13 @@ export default function Home() {
      */
     const unsubscribeDigit =
       dataManager.onDigit((digit) => {
+        if (!mounted) return;
+
+        console.log(
+          "[Dashboard] New digit:",
+          digit
+        );
+
         setLatestDigits((previous) => {
           const updated = [
             ...previous,
@@ -176,10 +196,25 @@ export default function Home() {
       });
 
     /*
-     * Cleanup connection and listeners
-     * when the market or window changes.
+     * Start the WebSocket connection
+     * AFTER listeners are ready.
+     */
+    console.log(
+      "[Dashboard] Connecting to:",
+      selectedMarket.name,
+      selectedMarket.symbol
+    );
+
+    dataManager.connect(
+      selectedMarket.symbol
+    );
+
+    /*
+     * Cleanup.
      */
     return () => {
+      mounted = false;
+
       unsubscribeStatus();
       unsubscribeDigit();
 
@@ -211,7 +246,7 @@ export default function Home() {
   }, [latestDigits]);
 
   /*
-   * Get analysis name.
+   * Analysis name.
    */
   const getAnalysisName = () => {
     switch (analysisType) {
@@ -231,9 +266,6 @@ export default function Home() {
 
   /*
    * Temporary prediction display.
-   *
-   * The actual prediction engine will
-   * be added later.
    */
   const getPredictionPlaceholder = () => {
     switch (analysisType) {
@@ -257,6 +289,10 @@ export default function Home() {
   const prediction =
     getPredictionPlaceholder();
 
+  /*
+   * Prediction engine will be connected
+   * after live data is confirmed.
+   */
   const confidence = 0;
 
   const status = "WAIT" as const;
@@ -286,7 +322,8 @@ export default function Home() {
           </p>
         </div>
 
-        {/* CONNECTION STATUS */}
+        {/* Connection status only.
+            No logs page/navigation. */}
 
         <div
           className={`connection-status ${
@@ -351,7 +388,6 @@ export default function Home() {
               }
             }}
           >
-
             {MARKETS.map((market) => (
               <option
                 key={market.symbol}
@@ -360,7 +396,6 @@ export default function Home() {
                 {market.name}
               </option>
             ))}
-
           </select>
 
         </div>
@@ -384,7 +419,6 @@ export default function Home() {
               )
             }
           >
-
             <option value="OVER_UNDER">
               Over / Under
             </option>
@@ -396,7 +430,6 @@ export default function Home() {
             <option value="MATCHES_DIFFERS">
               Matches / Differs
             </option>
-
           </select>
 
         </div>
@@ -421,7 +454,6 @@ export default function Home() {
               )
             }
           >
-
             {TICK_WINDOWS.map((ticks) => (
               <option
                 key={ticks}
@@ -430,7 +462,6 @@ export default function Home() {
                 {ticks.toLocaleString()} ticks
               </option>
             ))}
-
           </select>
 
         </div>
@@ -458,7 +489,6 @@ export default function Home() {
                 )
               }
             >
-
               {Array.from(
                 { length: 10 },
                 (_, digit) => (
@@ -470,7 +500,6 @@ export default function Home() {
                   </option>
                 )
               )}
-
             </select>
 
           </div>
