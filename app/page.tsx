@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 
+import Link from "next/link";
+
 import MarketCard from "../components/MarketCard";
 import TopSignals from "../components/TopSignals";
 import DigitStats from "../components/DigitStats";
@@ -34,6 +36,312 @@ const MARKETS: MarketOption[] = [
     name: "Volatility 25 Index",
     symbol: "R_25",
   },
+  {
+    name: "Volatility 50 Index",
+    symbol: "R_50",
+  },
+  {
+    name: "Volatility 75 Index",
+    symbol: "R_75",
+  },
+  {
+    name: "Volatility 100 Index",
+    symbol: "R_100",
+  },
+  {
+    name: "Volatility 10 (1s) Index",
+    symbol: "1HZ10V",
+  },
+  {
+    name: "Volatility 25 (1s) Index",
+    symbol: "1HZ25V",
+  },
+  {
+    name: "Volatility 50 (1s) Index",
+    symbol: "1HZ50V",
+  },
+  {
+    name: "Volatility 75 (1s) Index",
+    symbol: "1HZ75V",
+  },
+  {
+    name: "Volatility 100 (1s) Index",
+    symbol: "1HZ100V",
+  },
+  {
+    name: "Jump 10 Index",
+    symbol: "JD10",
+  },
+  {
+    name: "Jump 25 Index",
+    symbol: "JD25",
+  },
+  {
+    name: "Jump 50 Index",
+    symbol: "JD50",
+  },
+  {
+    name: "Jump 75 Index",
+    symbol: "JD75",
+  },
+  {
+    name: "Jump 100 Index",
+    symbol: "JD100",
+  },
+];
+
+const TICK_WINDOWS = [
+  100,
+  250,
+  500,
+  1000,
+  2000,
+  5000,
+];
+
+export default function Home() {
+  const [selectedMarket, setSelectedMarket] =
+    useState<MarketOption>(MARKETS[4]);
+
+  const [analysisType, setAnalysisType] =
+    useState<AnalysisType>("OVER_UNDER");
+
+  const [tickWindow, setTickWindow] =
+    useState(1000);
+
+  const [targetDigit, setTargetDigit] =
+    useState(7);
+
+  const [latestDigits, setLatestDigits] =
+    useState<number[]>([]);
+
+  const [isConnected, setIsConnected] =
+    useState(false);
+
+  /*
+   * Create the analysis engine using
+   * the selected tick window.
+   */
+  const dataManager = useMemo(() => {
+    const engine =
+      new DerivAnalysisEngine(tickWindow);
+
+    return new DerivDataManager(engine);
+  }, [tickWindow]);
+
+  /*
+   * Connect to Deriv.
+   */
+  useEffect(() => {
+    setIsConnected(false);
+    setLatestDigits([]);
+
+    console.log(
+      "[Dashboard] Connecting to:",
+      selectedMarket.name,
+      selectedMarket.symbol
+    );
+
+    dataManager.connect(
+      selectedMarket.symbol
+    );
+
+    /*
+     * Listen for actual WebSocket status.
+     */
+    const unsubscribeStatus =
+      dataManager.onStatus((status) => {
+        console.log(
+          "[Dashboard] Deriv status:",
+          status
+        );
+
+        if (status === "connected") {
+          setIsConnected(true);
+        }
+
+        if (
+          status === "disconnected" ||
+          status === "error"
+        ) {
+          setIsConnected(false);
+        }
+      });
+
+    /*
+     * Listen for live digits.
+     */
+    const unsubscribeDigit =
+      dataManager.onDigit((digit) => {
+        console.log(
+          "[Dashboard] New digit:",
+          digit
+        );
+
+        setLatestDigits((previous) => {
+          const updated = [
+            ...previous,
+            digit,
+          ];
+
+          return updated.slice(
+            -tickWindow
+          );
+        });
+      });
+
+    /*
+     * Cleanup.
+     */
+    return () => {
+      unsubscribeStatus();
+      unsubscribeDigit();
+
+      dataManager.disconnect();
+    };
+  }, [
+    dataManager,
+    selectedMarket,
+    tickWindow,
+  ]);
+
+  /*
+   * Calculate digit distribution.
+   */
+  const digitCounts = useMemo(() => {
+    const counts = Array(10).fill(0);
+
+    latestDigits.forEach((digit) => {
+      if (
+        Number.isInteger(digit) &&
+        digit >= 0 &&
+        digit <= 9
+      ) {
+        counts[digit]++;
+      }
+    });
+
+    return counts;
+  }, [latestDigits]);
+
+  /*
+   * Analysis name.
+   */
+  const getAnalysisName = () => {
+    switch (analysisType) {
+      case "OVER_UNDER":
+        return "OVER / UNDER";
+
+      case "EVEN_ODD":
+        return "EVEN / ODD";
+
+      case "MATCHES_DIFFERS":
+        return "MATCHES / DIFFERS";
+
+      default:
+        return "OVER / UNDER";
+    }
+  };
+
+  /*
+   * Temporary prediction display.
+   */
+  const getPredictionPlaceholder = () => {
+    switch (analysisType) {
+      case "OVER_UNDER":
+        return "OVER / UNDER";
+
+      case "EVEN_ODD":
+        return "EVEN / ODD";
+
+      case "MATCHES_DIFFERS":
+        return `MATCHES / DIFFERS ${targetDigit}`;
+
+      default:
+        return "OVER / UNDER";
+    }
+  };
+
+  const analysisName =
+    getAnalysisName();
+
+  const prediction =
+    getPredictionPlaceholder();
+
+  const confidence = 0;
+
+  const status = "WAIT" as const;
+
+  const signals = [
+    {
+      market: selectedMarket.name,
+      prediction,
+      confidence,
+      status,
+    },
+  ];
+
+  return (
+    <main className="dashboard">
+
+      {/* HEADER */}
+
+      <header className="dashboard-header">
+        <div>
+          <h1>Deriv Analysis</h1>
+
+          <p>
+            Live market analysis and
+            prediction dashboard
+          </p>
+        </div>
+
+        {/* CONNECTION / LOGS BUTTON */}
+
+        <Link
+          href="/logs"
+          className={`connection-status ${
+            isConnected
+              ? "connected"
+              : "connecting"
+          }`}
+          title="Open system connection logs"
+        >
+          <span className="connection-dot" />
+
+          {isConnected
+            ? "Connected"
+            : "Connecting..."}
+
+          <span className="connection-arrow">
+            →
+          </span>
+        </Link>
+      </header>
+
+
+      {/* ANALYSIS CONTROLS */}
+
+      <section className="analysis-controls">
+
+        <div className="section-header">
+          <div>
+            <h2>
+              Analysis Settings
+            </h2>
+
+            <p>
+              Choose the market, analysis type
+              and digit tick window
+            </p>
+          </div>
+        </div>
+
+
+        {/* MARKET */}
+
+        <div className="control-group">
+          <label htmlFor="
   {
     name: "Volatility 50 Index",
     symbol: "R_50",
