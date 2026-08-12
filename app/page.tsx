@@ -1,553 +1,230 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
-import Link from "next/link";
-
-import MarketCard from "../components/MarketCard";
-import TopSignals from "../components/TopSignals";
-import DigitStats from "../components/DigitStats";
-import RecentTicks from "../components/RecentTicks";
-import SignalHistory from "../components/SignalHistory";
-
-import { DerivDataManager } from "../lib/deriv-data";
-import { DerivAnalysisEngine } from "../lib/deriv-engine";
-
-type AnalysisType =
-  | "OVER_UNDER"
-  | "EVEN_ODD"
-  | "MATCHES_DIFFERS";
-
-interface MarketOption {
-  name: string;
-  symbol: string;
+interface LogEntry {
+  time: string;
+  type: "INFO" | "SUCCESS" | "ERROR" | "TICK";
+  message: string;
 }
 
-const MARKETS: MarketOption[] = [
-  {
-    name: "Volatility 10 Index",
-    symbol: "R_10",
-  },
-  {
-    name: "Volatility 25 Index",
-    symbol: "R_25",
-  },
-  {
-    name: "Volatility 50 Index",
-    symbol: "R_50",
-  },
-  {
-    name: "Volatility 75 Index",
-    symbol: "R_75",
-  },
-  {
-    name: "Volatility 100 Index",
-    symbol: "R_100",
-  },
-  {
-    name: "Volatility 10 (1s) Index",
-    symbol: "1HZ10V",
-  },
-  {
-    name: "Volatility 25 (1s) Index",
-    symbol: "1HZ25V",
-  },
-  {
-    name: "Volatility 50 (1s) Index",
-    symbol: "1HZ50V",
-  },
-  {
-    name: "Volatility 75 (1s) Index",
-    symbol: "1HZ75V",
-  },
-  {
-    name: "Volatility 100 (1s) Index",
-    symbol: "1HZ100V",
-  },
-  {
-    name: "Jump 10 Index",
-    symbol: "JD10",
-  },
-  {
-    name: "Jump 25 Index",
-    symbol: "JD25",
-  },
-  {
-    name: "Jump 50 Index",
-    symbol: "JD50",
-  },
-  {
-    name: "Jump 75 Index",
-    symbol: "JD75",
-  },
-  {
-    name: "Jump 100 Index",
-    symbol: "JD100",
-  },
-];
+export default function LogsPage() {
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [connected, setConnected] = useState(false);
 
-const TICK_WINDOWS = [
-  100,
-  250,
-  500,
-  1000,
-  2000,
-  5000,
-];
-
-export default function Home() {
-  const [selectedMarket, setSelectedMarket] =
-    useState<MarketOption>(MARKETS[4]);
-
-  const [analysisType, setAnalysisType] =
-    useState<AnalysisType>("OVER_UNDER");
-
-  const [tickWindow, setTickWindow] =
-    useState(1000);
-
-  const [targetDigit, setTargetDigit] =
-    useState(7);
-
-  const [latestDigits, setLatestDigits] =
-    useState<number[]>([]);
-
-  const [isConnected, setIsConnected] =
-    useState(false);
-
-  /*
-   * Create the analysis engine using
-   * the selected tick window.
-   */
-  const dataManager = useMemo(() => {
-    const engine =
-      new DerivAnalysisEngine(tickWindow);
-
-    return new DerivDataManager(engine);
-  }, [tickWindow]);
-
-  /*
-   * Connect to Deriv.
-   */
   useEffect(() => {
-    setIsConnected(false);
-    setLatestDigits([]);
+    const addLog = (
+      type: LogEntry["type"],
+      message: string
+    ) => {
+      const now = new Date();
 
-    console.log(
-      "[Dashboard] Connecting to:",
-      selectedMarket.name,
-      selectedMarket.symbol
-    );
+      const time = now.toLocaleTimeString();
 
-    dataManager.connect(
-      selectedMarket.symbol
-    );
-
-    /*
-     * Listen for actual WebSocket status.
-     */
-    const unsubscribeStatus =
-      dataManager.onStatus((status) => {
-        console.log(
-          "[Dashboard] Deriv status:",
-          status
-        );
-
-        if (status === "connected") {
-          setIsConnected(true);
-        }
-
-        if (
-          status === "disconnected" ||
-          status === "error"
-        ) {
-          setIsConnected(false);
-        }
-      });
-
-    /*
-     * Listen for live digits.
-     */
-    const unsubscribeDigit =
-      dataManager.onDigit((digit) => {
-        console.log(
-          "[Dashboard] New digit:",
-          digit
-        );
-
-        setLatestDigits((previous) => {
-          const updated = [
-            ...previous,
-            digit,
-          ];
-
-          return updated.slice(
-            -tickWindow
-          );
-        });
-      });
-
-    /*
-     * Cleanup.
-     */
-    return () => {
-      unsubscribeStatus();
-      unsubscribeDigit();
-
-      dataManager.disconnect();
+      setLogs((previous) => [
+        ...previous,
+        {
+          time,
+          type,
+          message,
+        },
+      ]);
     };
-  }, [
-    dataManager,
-    selectedMarket,
-    tickWindow,
-  ]);
 
-  /*
-   * Calculate digit distribution.
-   */
-  const digitCounts = useMemo(() => {
-    const counts = Array(10).fill(0);
+    addLog(
+      "INFO",
+      "Deriv Analysis diagnostic console opened."
+    );
 
-    latestDigits.forEach((digit) => {
-      if (
-        Number.isInteger(digit) &&
-        digit >= 0 &&
-        digit <= 9
-      ) {
-        counts[digit]++;
+    addLog(
+      "INFO",
+      "This page is ready to display connection and market-data events."
+    );
+
+    /*
+     * Listen for messages sent from the main dashboard.
+     */
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data) return;
+
+      const data = event.data;
+
+      if (data.type === "DERIV_STATUS") {
+        if (data.status === "connected") {
+          setConnected(true);
+
+          addLog(
+            "SUCCESS",
+            "WebSocket connection established with Deriv."
+          );
+        }
+
+        if (data.status === "connecting") {
+          setConnected(false);
+
+          addLog(
+            "INFO",
+            "Attempting to connect to Deriv..."
+          );
+        }
+
+        if (data.status === "disconnected") {
+          setConnected(false);
+
+          addLog(
+            "ERROR",
+            "WebSocket disconnected from Deriv."
+          );
+        }
+
+        if (data.status === "error") {
+          setConnected(false);
+
+          addLog(
+            "ERROR",
+            data.message ||
+              "Deriv WebSocket reported an error."
+          );
+        }
       }
-    });
 
-    return counts;
-  }, [latestDigits]);
+      if (data.type === "DERIV_TICK") {
+        addLog(
+          "TICK",
+          `Live tick received — Digit: ${data.digit}`
+        );
+      }
 
-  /*
-   * Analysis name.
-   */
-  const getAnalysisName = () => {
-    switch (analysisType) {
-      case "OVER_UNDER":
-        return "OVER / UNDER";
+      if (data.type === "DERIV_LOG") {
+        addLog(
+          data.level || "INFO",
+          data.message
+        );
+      }
+    };
 
-      case "EVEN_ODD":
-        return "EVEN / ODD";
+    window.addEventListener(
+      "message",
+      handleMessage
+    );
 
-      case "MATCHES_DIFFERS":
-        return "MATCHES / DIFFERS";
+    return () => {
+      window.removeEventListener(
+        "message",
+        handleMessage
+      );
+    };
+  }, []);
 
-      default:
-        return "OVER / UNDER";
-    }
+  const clearLogs = () => {
+    setLogs([]);
   };
-
-  /*
-   * Temporary prediction display.
-   */
-  const getPredictionPlaceholder = () => {
-    switch (analysisType) {
-      case "OVER_UNDER":
-        return "OVER / UNDER";
-
-      case "EVEN_ODD":
-        return "EVEN / ODD";
-
-      case "MATCHES_DIFFERS":
-        return `MATCHES / DIFFERS ${targetDigit}`;
-
-      default:
-        return "OVER / UNDER";
-    }
-  };
-
-  const analysisName =
-    getAnalysisName();
-
-  const prediction =
-    getPredictionPlaceholder();
-
-  const confidence = 0;
-
-  const status = "WAIT" as const;
-
-  const signals = [
-    {
-      market: selectedMarket.name,
-      prediction,
-      confidence,
-      status,
-    },
-  ];
 
   return (
-    <main className="dashboard">
+    <main className="logs-page">
 
-      {/* HEADER */}
+      <header className="logs-header">
 
-      <header className="dashboard-header">
         <div>
-          <h1>Deriv Analysis</h1>
+          <h1>Connection Logs</h1>
 
           <p>
-            Live market analysis and
-            prediction dashboard
+            Deriv market-data connection and
+            diagnostic information
           </p>
         </div>
 
-        {/* CONNECTION / LOGS BUTTON */}
-
-        <Link
-          href="/logs"
-          className={`connection-status ${
-            isConnected
-              ? "connected"
-              : "connecting"
+        <div
+          className={`logs-status ${
+            connected
+              ? "logs-connected"
+              : "logs-disconnected"
           }`}
-          title="Open system connection logs"
         >
-          <span className="connection-dot" />
+          <span />
 
-          {isConnected
+          {connected
             ? "Connected"
-            : "Connecting..."}
+            : "Not Connected"}
+        </div>
 
-          <span className="connection-arrow">
-            →
-          </span>
-        </Link>
       </header>
 
 
-      {/* ANALYSIS CONTROLS */}
+      <section className="logs-panel">
 
-      <section className="analysis-controls">
+        <div className="logs-toolbar">
 
-        <div className="section-header">
           <div>
-            <h2>
-              Analysis Settings
-            </h2>
+            <strong>
+              System Activity
+            </strong>
 
-            <p>
-              Choose the market, analysis type
-              and digit tick window
-            </p>
+            <span>
+              {logs.length} log
+              {logs.length === 1
+                ? ""
+                : "s"}
+            </span>
           </div>
+
+          <button
+            type="button"
+            onClick={clearLogs}
+          >
+            Clear Logs
+          </button>
+
         </div>
 
 
-        {/* MARKET */}
+        <div className="logs-container">
 
-        <div className="control-group">
-          <label htmlFor="
-  {
-    name: "Volatility 50 Index",
-    symbol: "R_50",
-  },
-  {
-    name: "Volatility 75 Index",
-    symbol: "R_75",
-  },
-  {
-    name: "Volatility 100 Index",
-    symbol: "R_100",
-  },
-  {
-    name: "Volatility 10 (1s) Index",
-    symbol: "1HZ10V",
-  },
-  {
-    name: "Volatility 25 (1s) Index",
-    symbol: "1HZ25V",
-  },
-  {
-    name: "Volatility 50 (1s) Index",
-    symbol: "1HZ50V",
-  },
-  {
-    name: "Volatility 75 (1s) Index",
-    symbol: "1HZ75V",
-  },
-  {
-    name: "Volatility 100 (1s) Index",
-    symbol: "1HZ100V",
-  },
-  {
-    name: "Jump 10 Index",
-    symbol: "JD10",
-  },
-  {
-    name: "Jump 25 Index",
-    symbol: "JD25",
-  },
-  {
-    name: "Jump 50 Index",
-    symbol: "JD50",
-  },
-  {
-    name: "Jump 75 Index",
-    symbol: "JD75",
-  },
-  {
-    name: "Jump 100 Index",
-    symbol: "JD100",
-  },
-];
+          {logs.length === 0 ? (
+            <div className="empty-logs">
+              No logs available yet.
+            </div>
+          ) : (
+            logs.map((log, index) => (
+              <div
+                className={`log-entry log-${log.type.toLowerCase()}`}
+                key={`${log.time}-${index}`}
+              >
 
-const TICK_WINDOWS = [
-  100,
-  250,
-  500,
-  1000,
-  2000,
-  5000,
-];
+                <span className="log-time">
+                  {log.time}
+                </span>
 
-export default function Home() {
-  const [selectedMarket, setSelectedMarket] =
-    useState<MarketOption>(MARKETS[4]);
+                <span className="log-type">
+                  {log.type}
+                </span>
 
-  const [analysisType, setAnalysisType] =
-    useState<AnalysisType>("OVER_UNDER");
+                <span className="log-message">
+                  {log.message}
+                </span>
 
-  const [tickWindow, setTickWindow] =
-    useState(1000);
+              </div>
+            ))
+          )}
 
-  const [targetDigit, setTargetDigit] =
-    useState(7);
+        </div>
 
-  const [latestDigits, setLatestDigits] =
-    useState<number[]>([]);
+      </section>
 
-  const [isConnected, setIsConnected] =
-    useState(false);
 
-  /*
-   * Create the analysis engine with the
-   * currently selected tick window.
-   */
-  const dataManager = useMemo(() => {
-    const engine =
-      new DerivAnalysisEngine(tickWindow);
+      <button
+        type="button"
+        className="back-dashboard"
+        onClick={() => {
+          window.location.href = "/";
+        }}
+      >
+        ← Back to Dashboard
+      </button>
 
-    return new DerivDataManager(engine);
-  }, [tickWindow]);
-
-  /*
-   * Connect to Deriv.
-   *
-   * IMPORTANT:
-   * Connection status now comes from the
-   * WebSocket status listener, NOT from
-   * receiving a digit.
-   */
-  useEffect(() => {
-    setIsConnected(false);
-    setLatestDigits([]);
-
-    console.log(
-      "[Dashboard] Connecting to:",
-      selectedMarket.name,
-      selectedMarket.symbol
-    );
-
-    dataManager.connect(
-      selectedMarket.symbol
-    );
-
-    /*
-     * Listen for actual WebSocket status.
-     */
-    const unsubscribeStatus =
-      dataManager.onStatus((status) => {
-        console.log(
-          "[Dashboard] Deriv status:",
-          status
-        );
-
-        if (status === "connected") {
-          setIsConnected(true);
-        }
-
-        if (
-          status === "disconnected" ||
-          status === "error"
-        ) {
-          setIsConnected(false);
-        }
-      });
-
-    /*
-     * Listen for new live digits.
-     */
-    const unsubscribeDigit =
-      dataManager.onDigit((digit) => {
-        console.log(
-          "[Dashboard] New digit:",
-          digit
-        );
-
-        setLatestDigits((previous) => {
-          const updated = [
-            ...previous,
-            digit,
-          ];
-
-          return updated.slice(
-            -tickWindow
-          );
-        });
-      });
-
-    /*
-     * Cleanup when market/window changes
-     * or the page is closed.
-     */
-    return () => {
-      unsubscribeStatus();
-      unsubscribeDigit();
-
-      dataManager.disconnect();
-    };
-  }, [
-    dataManager,
-    selectedMarket,
-    tickWindow,
-  ]);
-
-  /*
-   * Calculate digit distribution.
-   */
-  const digitCounts = useMemo(() => {
-    const counts = Array(10).fill(0);
-
-    latestDigits.forEach((digit) => {
-      if (
-        Number.isInteger(digit) &&
-        digit >= 0 &&
-        digit <= 9
-      ) {
-        counts[digit]++;
-      }
-    });
-
-    return counts;
-  }, [latestDigits]);
-
-  /*
-   * Analysis name.
-   */
-  const getAnalysisName = () => {
-    switch (analysisType) {
-      case "OVER_UNDER":
-        return "OVER / UNDER";
-
-      case "EVEN_ODD":
-        return "EVEN / ODD";
-
-      case "MATCHES_DIFFERS":
+    </main>
+  );
+}ERS":
         return "MATCHES / DIFFERS";
 
       default:
