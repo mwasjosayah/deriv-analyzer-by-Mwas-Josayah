@@ -8,7 +8,6 @@ export interface DerivTick {
 }
 
 type DigitListener = (digit: number) => void;
-
 type TickListener = (tick: DerivTick) => void;
 
 type StatusListener = (
@@ -21,22 +20,14 @@ export class DerivDataManager {
   private engine: DerivAnalysisEngine;
 
   private digitListeners: DigitListener[] = [];
-
   private tickListeners: TickListener[] = [];
-
   private statusListeners: StatusListener[] = [];
 
   private currentTick: DerivTick | null = null;
 
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-  private reconnectAttempts = 0;
-
   private currentSymbol: string | null = null;
 
   private manuallyDisconnected = false;
-
-  private lastTickKey: string | null = null;
 
   constructor(engine?: DerivAnalysisEngine) {
     this.engine = engine ?? new DerivAnalysisEngine(1000);
@@ -47,104 +38,101 @@ export class DerivDataManager {
       return;
     }
 
+    this.disconnect();
+
     this.currentSymbol = symbol;
     this.manuallyDisconnected = false;
-    this.reconnectAttempts = 0;
-    this.lastTickKey = null;
-
-    this.disconnectSocketOnly();
 
     this.setStatus("connecting");
 
     console.log(
-      `[Deriv] Connecting to ${symbol}...`
+      "[Deriv] Connecting to market:",
+      symbol
     );
 
-    this.socket = new WebSocket(
+    const socket = new WebSocket(
       "wss://ws.binaryws.com/websockets/v3"
     );
 
-    this.socket.onopen = () => {
+    this.socket = socket;
+
+    socket.onopen = () => {
       console.log(
-        `[Deriv] WebSocket connected for ${symbol}`
+        "[Deriv] WebSocket connected"
       );
 
-      this.reconnectAttempts = 0;
-
-      /*
-       * IMPORTANT:
-       * Tell the page that the WebSocket itself
-       * is connected.
-       *
-       * We no longer wait for a tick before doing this.
-       */
       this.setStatus("connected");
 
       /*
-       * Request the previous 1,000 ticks.
+       * STEP 1:
+       * Ask Deriv for server time.
+       *
+       * This confirms that the WebSocket itself
+       * is responding before we process ticks.
        */
-      const historyRequest = {
-        ticks_history: symbol,
-        count: 1000,
-        end: "latest",
-        style: "ticks",
-        subscribe: 0,
-      };
-
-      console.log(
-        "[Deriv] Requesting 1,000 historical ticks..."
-      );
-
-      this.socket?.send(
-        JSON.stringify(historyRequest)
+      socket.send(
+        JSON.stringify({
+          time: 1,
+          req_id: 1,
+        })
       );
 
       /*
-       * Subscribe to future live ticks.
+       * STEP 2:
+       * Load the latest 1,000 historical ticks.
        */
-      const liveRequest = {
-        ticks: symbol,
-        subscribe: 1,
-      };
-
-      console.log(
-        "[Deriv] Subscribing to live ticks..."
+      socket.send(
+        JSON.stringify({
+          ticks_history: symbol,
+          count: 1000,
+          end: "latest",
+          style: "ticks",
+          subscribe: 0,
+          req_id: 2,
+        })
       );
 
-      this.socket?.send(
-        JSON.stringify(liveRequest)
+      /*
+       * STEP 3:
+       * Subscribe to new live ticks.
+       */
+      socket.send(
+        JSON.stringify({
+          ticks: symbol,
+          subscribe: 1,
+          req_id: 3,
+        })
+      );
+
+      console.log(
+        "[Deriv] Tick requests sent for:",
+        symbol
       );
     };
 
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
 
         console.log(
-          "[Deriv] Message:",
-          data.msg_type
+          "[Deriv message]",
+          data
         );
 
         /*
-         * ============================
-         * ERROR RESPONSE
-         * ============================
+         * SERVER TIME
          */
-        if (data.error) {
-          console.error(
-            "[Deriv] API error:",
-            data.error.message ?? data.error
+        if (data.msg_type === "time") {
+          console.log(
+            "[Deriv] Server connection confirmed:",
+            data.time
           );
-
-          this.setStatus("error");
 
           return;
         }
 
         /*
-         * ============================
          * HISTORICAL TICKS
-         * ============================
          */
         if (
           data.msg_type === "history" &&
@@ -154,18 +142,6 @@ export class DerivDataManager {
           const prices =
             data.history.prices as number[];
 
-          const times =
-            Array.isArray(data.history.times)
-              ? (data.history.times as number[])
-              : [];
-
-          /*
-           * Deriv gives us the pip size.
-           *
-           * Example:
-           * pip_size = 2
-           * 123.45 -> final digit = 5
-           */
           const pipSize =
             typeof data.pip_size === "number"
               ? data.pip_size
@@ -186,71 +162,29 @@ export class DerivDataManager {
             );
 
           /*
-           * Reset the analysis window.
+           * Start analysis from the latest
+           * 1,000 ticks.
            */
           this.engine.clear();
 
-          /*
-           * Load the latest 1,000 historical digits.
-           */
-          const initialDigits =
-            digits.slice(-1000);
-
-          this.engine.addTicks(initialDigits);
+          this.engine.addTicks(
+            digits.slice(-1000)
+          );
 
           console.log(
-            `[Deriv] Loaded ${initialDigits.length} historical ticks`
+            `[Deriv] Historical ticks loaded: ${digits.length}`
           );
 
-          /*
-           * Send historical digits to the UI.
-           *
-           * This is the part that was missing before.
-           */
-          initialDigits.forEach(
-            (digit: number) => {
-              this.notifyDigitListeners(digit);
-            }
+          console.log(
+            "[Deriv] Current analysis tick count:",
+            this.engine.getTickCount()
           );
-
-          /*
-           * Set the most recent historical tick
-           * as the current tick until the first
-           * live tick arrives.
-           */
-          if (prices.length > 0) {
-            const latestIndex =
-              prices.length - 1;
-
-            const latestQuote =
-              prices[latestIndex];
-
-            const latestEpoch =
-              times[latestIndex] ??
-              Math.floor(Date.now() / 1000);
-
-            const latestDigit =
-              this.extractDigit(
-                latestQuote,
-                pipSize
-              );
-
-            this.currentTick = {
-              quote: latestQuote,
-              epoch: latestEpoch,
-              digit: latestDigit,
-              symbol:
-                this.currentSymbol ?? "",
-            };
-          }
 
           return;
         }
 
         /*
-         * ============================
          * LIVE TICK
-         * ============================
          */
         if (
           data.msg_type === "tick" &&
@@ -268,13 +202,11 @@ export class DerivDataManager {
                 );
 
           const tickSymbol =
-            typeof data.tick.symbol === "string"
+            typeof data.tick.symbol ===
+            "string"
               ? data.tick.symbol
               : this.currentSymbol ?? "";
 
-          /*
-           * Prefer pip_size supplied by Deriv.
-           */
           const pipSize =
             typeof data.tick.pip_size ===
             "number"
@@ -294,22 +226,17 @@ export class DerivDataManager {
             digit < 0 ||
             digit > 9
           ) {
+            console.warn(
+              "[Deriv] Invalid digit:",
+              digit,
+              "quote:",
+              quote,
+              "pip:",
+              pipSize
+            );
+
             return;
           }
-
-          /*
-           * Prevent duplicate ticks.
-           */
-          const tickKey =
-            `${tickSymbol}-${epoch}-${quote}`;
-
-          if (
-            tickKey === this.lastTickKey
-          ) {
-            return;
-          }
-
-          this.lastTickKey = tickKey;
 
           const tick: DerivTick = {
             quote,
@@ -321,117 +248,76 @@ export class DerivDataManager {
           this.currentTick = tick;
 
           /*
-           * Add live digit to rolling
+           * Add the live tick to the rolling
            * analysis window.
            */
           this.engine.addTick(digit);
 
           console.log(
-            `[Deriv] LIVE TICK: ${quote} | Digit: ${digit}`
+            "[Deriv LIVE TICK]",
+            tick
           );
 
-          /*
-           * Notify the UI.
-           */
           this.notifyTickListeners(tick);
 
           this.notifyDigitListeners(digit);
 
           return;
         }
+
+        /*
+         * ERROR FROM DERIV
+         */
+        if (data.error) {
+          console.error(
+            "[Deriv API ERROR]",
+            data.error
+          );
+
+          this.setStatus("error");
+
+          return;
+        }
       } catch (error) {
         console.error(
-          "[Deriv] Error processing message:",
+          "[Deriv] Message processing error:",
           error
         );
       }
     };
 
-    this.socket.onerror = (error) => {
+    socket.onerror = (error) => {
       console.error(
-        "[Deriv] WebSocket error:",
+        "[Deriv WebSocket ERROR]",
         error
       );
 
       this.setStatus("error");
     };
 
-    this.socket.onclose = (event) => {
+    socket.onclose = (event) => {
       console.log(
-        `[Deriv] WebSocket closed. Code: ${event.code}`
+        "[Deriv] WebSocket closed",
+        {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        }
       );
 
       this.socket = null;
 
       if (!this.manuallyDisconnected) {
-        this.setStatus("disconnected");
-
-        this.scheduleReconnect();
+        this.setStatus(
+          "disconnected"
+        );
       }
     };
-  }
-
-  private scheduleReconnect() {
-    if (
-      this.manuallyDisconnected ||
-      !this.currentSymbol
-    ) {
-      return;
-    }
-
-    if (this.reconnectTimer) {
-      return;
-    }
-
-    const delay = Math.min(
-      1000 *
-        Math.pow(
-          2,
-          this.reconnectAttempts
-        ),
-      30000
-    );
-
-    this.reconnectAttempts++;
-
-    console.log(
-      `[Deriv] Reconnecting in ${
-        delay / 1000
-      } seconds...`
-    );
-
-    this.reconnectTimer =
-      setTimeout(() => {
-        this.reconnectTimer = null;
-
-        if (
-          this.currentSymbol &&
-          !this.manuallyDisconnected
-        ) {
-          this.connect(
-            this.currentSymbol
-          );
-        }
-      }, delay);
   }
 
   disconnect() {
     this.manuallyDisconnected = true;
 
-    if (this.reconnectTimer) {
-      clearTimeout(
-        this.reconnectTimer
-      );
-
-      this.reconnectTimer = null;
-    }
-
-    this.disconnectSocketOnly();
-
-    this.setStatus("disconnected");
-  }
-
-  private disconnectSocketOnly() {
     if (this.socket) {
       try {
         this.socket.close();
@@ -444,6 +330,8 @@ export class DerivDataManager {
 
       this.socket = null;
     }
+
+    this.setStatus("disconnected");
   }
 
   onDigit(listener: DigitListener) {
@@ -452,8 +340,7 @@ export class DerivDataManager {
     return () => {
       this.digitListeners =
         this.digitListeners.filter(
-          (item) =>
-            item !== listener
+          (item) => item !== listener
         );
     };
   }
@@ -464,8 +351,7 @@ export class DerivDataManager {
     return () => {
       this.tickListeners =
         this.tickListeners.filter(
-          (item) =>
-            item !== listener
+          (item) => item !== listener
         );
     };
   }
@@ -476,8 +362,7 @@ export class DerivDataManager {
     return () => {
       this.statusListeners =
         this.statusListeners.filter(
-          (item) =>
-            item !== listener
+          (item) => item !== listener
         );
     };
   }
@@ -493,8 +378,7 @@ export class DerivDataManager {
   getStatus() {
     if (
       this.socket &&
-      this.socket.readyState ===
-        WebSocket.OPEN
+      this.socket.readyState === WebSocket.OPEN
     ) {
       return "connected" as const;
     }
@@ -606,14 +490,11 @@ export class DerivDataManager {
     prices: number[]
   ): number {
     const sample =
-      prices.find(
-        (price) =>
-          Number.isFinite(price)
+      prices.find((price) =>
+        Number.isFinite(price)
       );
 
-    if (
-      sample === undefined
-    ) {
+    if (sample === undefined) {
       return 2;
     }
 
@@ -632,8 +513,7 @@ export class DerivDataManager {
     }
 
     return (
-      text.split(".")[1]?.length ??
-      0
+      text.split(".")[1]?.length ?? 0
     );
   }
 }
