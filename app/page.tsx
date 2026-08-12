@@ -289,19 +289,23 @@ export default function LogsPage() {
           </p>
         </div>
 
-        <div
-          className={`connection-status ${
-            isConnected
-              ? "connected"
-              : "connecting"
-          }`}
-        >
-          <span className="connection-dot" />
+        <button
+  type="button"
+  className={`connection-status ${
+    isConnected
+      ? "connected"
+      : "connecting"
+  }`}
+  onClick={() => {
+    window.location.href = "/logs";
+  }}
+>
+  <span className="connection-dot" />
 
-          {isConnected
-            ? "Connected"
-            : "Connecting..."}
-        </div>
+  {isConnected
+    ? "Connected"
+    : "Connecting..."}
+</button>
       </header>
 
 
