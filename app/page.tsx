@@ -40,52 +40,37 @@ const TICK_WINDOWS = [
 ];
 
 export default function Home() {
-  const [
-    category,
-    setCategory,
-  ] = useState<MarketCategory>(
-    DEFAULT_CATEGORY
-  );
+  const [category, setCategory] =
+    useState<MarketCategory>(
+      DEFAULT_CATEGORY
+    );
 
-  const [
-    selectedSymbol,
-    setSelectedSymbol,
-  ] = useState(
-    DEFAULT_SYMBOL
-  );
+  const [selectedSymbol, setSelectedSymbol] =
+    useState<string>(
+      DEFAULT_SYMBOL
+    );
 
-  const [
-    marketType,
-    setMarketType,
-  ] = useState<MarketType>(
-    DEFAULT_MARKET_TYPE
-  );
+  const [marketType, setMarketType] =
+    useState<MarketType>(
+      DEFAULT_MARKET_TYPE
+    );
 
-  const [
-    selectedDigit,
-    setSelectedDigit,
-  ] = useState(
-    DEFAULT_SELECTED_DIGIT
-  );
+  const [selectedDigit, setSelectedDigit] =
+    useState<number>(
+      DEFAULT_SELECTED_DIGIT
+    );
 
-  const [
-    tickWindow,
-    setTickWindow,
-  ] = useState(1000);
+  const [tickWindow, setTickWindow] =
+    useState<number>(1000);
 
-  const [
-    latestDigits,
-    setLatestDigits,
-  ] = useState<number[]>([]);
+  const [latestDigits, setLatestDigits] =
+    useState<number[]>([]);
 
-  const [
-    isConnected,
-    setIsConnected,
-  ] = useState(false);
+  const [isConnected, setIsConnected] =
+    useState<boolean>(false);
 
   /*
-   * Create a fresh analysis engine
-   * whenever the tick window changes.
+   * Analysis engine.
    */
   const dataManager = useMemo(() => {
     const engine =
@@ -99,16 +84,12 @@ export default function Home() {
   }, [tickWindow]);
 
   /*
-   * Connect to the selected
-   * Deriv market.
+   * Deriv connection.
    */
   useEffect(() => {
     setIsConnected(false);
     setLatestDigits([]);
 
-    /*
-     * Status listener.
-     */
     const unsubscribeStatus =
       dataManager.onStatus(
         (status) => {
@@ -132,9 +113,6 @@ export default function Home() {
         }
       );
 
-    /*
-     * Digit listener.
-     */
     const unsubscribeDigit =
       dataManager.onDigit(
         (digit: number) => {
@@ -180,7 +158,7 @@ export default function Home() {
   ]);
 
   /*
-   * Digit distribution.
+   * Digit counts.
    */
   const digitCounts = useMemo(() => {
     const counts =
@@ -204,73 +182,78 @@ export default function Home() {
   }, [latestDigits]);
 
   /*
-   * Display name for the selected
+   * Display name of selected
    * analysis type.
    */
-  const analysisName = useMemo(() => {
-    switch (marketType) {
-      case "OVER_2":
-        return "OVER 2";
+  const analysisName =
+    useMemo(() => {
+      switch (marketType) {
+        case "OVER_2":
+          return "OVER 2";
 
-      case "UNDER_7":
-        return "UNDER 7";
+        case "UNDER_7":
+          return "UNDER 7";
 
-      case "EVEN":
-        return "EVEN";
+        case "EVEN":
+          return "EVEN";
 
-      case "ODD":
-        return "ODD";
+        case "ODD":
+          return "ODD";
 
-      case "MATCHES":
-        return `MATCHES ${selectedDigit}`;
+        case "MATCHES":
+          return `MATCHES ${selectedDigit}`;
 
-      case "DIFFERS":
-        return `DIFFERS ${selectedDigit}`;
+        case "DIFFERS":
+          return `DIFFERS ${selectedDigit}`;
 
-      default:
-        return "OVER 2";
-    }
-  }, [
-    marketType,
-    selectedDigit,
-  ]);
+        default:
+          return "OVER 2";
+      }
+    }, [
+      marketType,
+      selectedDigit,
+    ]);
 
   /*
-   * Prediction will be replaced
-   * by the real analysis engine
-   * later.
+   * Temporary prediction.
+   *
+   * The actual analysis conditions
+   * and confidence engine will be
+   * added later.
    */
-  const prediction = useMemo(() => {
-    switch (marketType) {
-      case "OVER_2":
-        return "OVER 2";
+  const prediction =
+    useMemo(() => {
+      switch (marketType) {
+        case "OVER_2":
+          return "OVER 2";
 
-      case "UNDER_7":
-        return "UNDER 7";
+        case "UNDER_7":
+          return "UNDER 7";
 
-      case "EVEN":
-        return "EVEN";
+        case "EVEN":
+          return "EVEN";
 
-      case "ODD":
-        return "ODD";
+        case "ODD":
+          return "ODD";
 
-      case "MATCHES":
-        return `MATCHES ${selectedDigit}`;
+        case "MATCHES":
+          return `MATCHES ${selectedDigit}`;
 
-      case "DIFFERS":
-        return `DIFFERS ${selectedDigit}`;
+        case "DIFFERS":
+          return `DIFFERS ${selectedDigit}`;
 
-      default:
-        return "WAIT";
-    }
-  }, [
-    marketType,
-    selectedDigit,
-  ]);
+        default:
+          return "WAIT";
+      }
+    }, [
+      marketType,
+      selectedDigit,
+    ]);
 
   /*
    * Real confidence calculation
-   * will be added later.
+   * will be added after the data
+   * pipeline is confirmed.
    */
   const confidence = 0;
 
@@ -285,6 +268,41 @@ export default function Home() {
       status,
     },
   ];
+
+  /*
+   * Change market category.
+   */
+  const handleCategoryChange = (
+    newCategory: MarketCategory
+  ) => {
+    setCategory(
+      newCategory
+    );
+
+    /*
+     * Select the first market
+     * in the new category.
+     */
+    switch (newCategory) {
+      case "VOLATILITY":
+        setSelectedSymbol(
+          "R_10"
+        );
+        break;
+
+      case "VOLATILITY_1S":
+        setSelectedSymbol(
+          "1HZ10V"
+        );
+        break;
+
+      case "JUMP":
+        setSelectedSymbol(
+          "JD10"
+        );
+        break;
+    }
+  };
 
   return (
     <main className="dashboard">
@@ -329,48 +347,12 @@ export default function Home() {
         marketType={marketType}
         selectedDigit={selectedDigit}
 
-        onCategoryChange={(
-          newCategory
-        ) => {
-          setCategory(
-            newCategory
-          );
-
-          /*
-           * Set the first market
-           * belonging to the selected
-           * category.
-           */
-          if (
-            newCategory ===
-            "VOLATILITY"
-          ) {
-            setSelectedSymbol(
-              "R_10"
-            );
-          }
-
-          if (
-            newCategory ===
-            "VOLATILITY_1S"
-          ) {
-            setSelectedSymbol(
-              "1HZ10V"
-            );
-          }
-
-          if (
-            newCategory ===
-            "JUMP"
-          ) {
-            setSelectedSymbol(
-              "JD10"
-            );
-          }
-        }}
+        onCategoryChange={
+          handleCategoryChange
+        }
 
         onSymbolChange={(
-          symbol
+          symbol: string
         ) => {
           setSelectedSymbol(
             symbol
@@ -378,7 +360,7 @@ export default function Home() {
         }}
 
         onMarketTypeChange={(
-          type
+          type: MarketType
         ) => {
           setMarketType(
             type
@@ -386,7 +368,7 @@ export default function Home() {
         }}
 
         onSelectedDigitChange={(
-          digit
+          digit: number
         ) => {
           setSelectedDigit(
             digit
@@ -408,7 +390,7 @@ export default function Home() {
 
             <p>
               Configure the amount of
-              tick data used for analysis
+              tick data used for analysis.
             </p>
           </div>
 
@@ -423,7 +405,9 @@ export default function Home() {
           <select
             id="tick-window"
             value={tickWindow}
-            onChange={(event) => {
+            onChange={(
+              event
+            ) => {
               setTickWindow(
                 Number(
                   event.target.value
@@ -462,7 +446,7 @@ export default function Home() {
 
             <p>
               Current analysis from
-              the selected market
+              the selected market.
             </p>
           </div>
 
