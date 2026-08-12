@@ -9,17 +9,17 @@ html {
 :root {
   --bg: #07111f;
   --bg-secondary: #0b1728;
-  --card: #0e1c2f;
-  --card-hover: #12243a;
+  --card: #0d1b2e;
+  --card-hover: #102238;
   --border: rgba(148, 163, 184, 0.14);
   --border-strong: rgba(148, 163, 184, 0.22);
 
   --text: #f4f7fb;
   --text-secondary: #9eacc0;
-  --text-muted: #6f7f95;
+  --text-muted: #6f7f94;
 
   --primary: #3b82f6;
-  --primary-light: #60a5fa;
+  --primary-soft: rgba(59, 130, 246, 0.12);
 
   --green: #22c55e;
   --green-soft: rgba(34, 197, 94, 0.12);
@@ -31,33 +31,39 @@ html {
   --yellow-soft: rgba(245, 158, 11, 0.12);
 
   --purple: #8b5cf6;
+  --purple-soft: rgba(139, 92, 246, 0.12);
 
-  --radius: 14px;
-  --radius-small: 9px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
   --shadow:
-    0 10px 30px rgba(0, 0, 0, 0.2);
+    0 12px 35px rgba(0, 0, 0, 0.22);
+
+  --transition:
+    0.2s ease;
 }
 
 html,
 body {
-  margin: 0;
-  padding: 0;
-  min-width: 320px;
   min-height: 100%;
 }
 
 body {
+  margin: 0;
+  min-width: 320px;
+
   background:
     radial-gradient(
       circle at 10% 0%,
-      rgba(59, 130, 246, 0.08),
-      transparent 28%
+      rgba(37, 99, 235, 0.08),
+      transparent 30%
     ),
     radial-gradient(
       circle at 90% 10%,
-      rgba(139, 92, 246, 0.06),
-      transparent 25%
+      rgba(124, 58, 237, 0.06),
+      transparent 28%
     ),
     var(--bg);
 
@@ -73,6 +79,7 @@ body {
     sans-serif;
 
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -87,11 +94,13 @@ button {
 
 select {
   appearance: none;
+
   width: 100%;
+
   padding: 12px 42px 12px 14px;
 
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-small);
+  border-radius: var(--radius-sm);
 
   background:
     linear-gradient(
@@ -104,130 +113,150 @@ select {
       var(--text-secondary) 50%,
       transparent 50%
     ) calc(100% - 15px) 50% / 6px 6px no-repeat,
-    var(--bg-secondary);
+    #0a182a;
 
   color: var(--text);
 
   outline: none;
+
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background var(--transition);
+
+  cursor: pointer;
 }
 
 select:hover {
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: rgba(59, 130, 246, 0.45);
 }
 
 select:focus {
   border-color: var(--primary);
+
   box-shadow:
     0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 option {
-  background: var(--bg-secondary);
+  background: #0d1b2e;
   color: var(--text);
 }
 
-/* ================================
+/* =========================================
    DASHBOARD
-================================ */
+========================================= */
 
 .dashboard {
   width: 100%;
   max-width: 1440px;
+
   margin: 0 auto;
-  padding: 32px 28px 50px;
+
+  padding:
+    28px
+    28px
+    50px;
 }
 
-/* ================================
+/* =========================================
    HEADER
-================================ */
+========================================= */
 
 .dashboard-header {
   display: flex;
+
   align-items: center;
   justify-content: space-between;
+
   gap: 24px;
 
-  margin-bottom: 28px;
   padding: 24px 26px;
 
+  margin-bottom: 24px;
+
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+
+  border-radius: var(--radius-xl);
 
   background:
     linear-gradient(
       135deg,
-      rgba(14, 28, 47, 0.96),
-      rgba(10, 22, 38, 0.92)
+      rgba(17, 34, 56, 0.96),
+      rgba(8, 20, 35, 0.96)
     );
 
   box-shadow: var(--shadow);
+
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-header::before {
+  content: "";
+
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 2px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      var(--primary),
+      var(--purple),
+      transparent
+    );
 }
 
 .dashboard-header h1 {
-  margin: 0 0 7px;
+  margin: 0;
 
-  font-size: 30px;
-  line-height: 1.1;
-  font-weight: 750;
-  letter-spacing: -0.8px;
+  font-size: clamp(24px, 3vw, 32px);
+
+  line-height: 1.15;
+
+  font-weight: 800;
+
+  letter-spacing: -0.6px;
 }
 
 .dashboard-header p {
-  margin: 0;
+  margin: 8px 0 0;
 
   color: var(--text-secondary);
 
   font-size: 14px;
 }
 
-/* ================================
+/* =========================================
    CONNECTION STATUS
-================================ */
+========================================= */
 
 .connection-status {
   display: inline-flex;
+
   align-items: center;
+
   gap: 9px;
 
-  flex-shrink: 0;
+  padding: 9px 14px;
 
-  padding: 9px 13px;
-
-  border: 1px solid var(--border);
   border-radius: 999px;
 
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
 
-  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.035);
 
   font-size: 13px;
-  font-weight: 650;
-}
 
-.connection-status.connected {
-  color: var(--green);
-  background: var(--green-soft);
-  border-color: rgba(34, 197, 94, 0.22);
-}
+  font-weight: 700;
 
-.connection-status.connecting {
-  color: var(--yellow);
-  background: var(--yellow-soft);
-  border-color: rgba(245, 158, 11, 0.22);
-}
-
-.connection-status.error {
-  color: var(--red);
-  background: var(--red-soft);
-  border-color: rgba(239, 68, 68, 0.22);
-}
-
-.connection-status.disconnected {
-  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .connection-dot {
@@ -236,88 +265,83 @@ option {
 
   border-radius: 50%;
 
-  background: currentColor;
+  background: var(--yellow);
 
   box-shadow:
-    0 0 0 4px currentColor;
-
-  opacity: 0.8;
+    0 0 0 4px var(--yellow-soft);
 }
 
-.connection-status.connected .connection-dot {
-  animation: connectionPulse 2s infinite;
-}
+.connection-status.connected {
+  color: #86efac;
 
-@keyframes connectionPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
-  }
-
-  50% {
-    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.03);
-  }
-}
-
-/* ================================
-   SECTIONS
-================================ */
-
-.analysis-controls,
-.market-overview,
-.top-signals,
-.digit-stats,
-.recent-ticks,
-.signal-history {
-  margin-bottom: 24px;
-
-  padding: 24px;
-
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-color:
+    rgba(34, 197, 94, 0.25);
 
   background:
-    linear-gradient(
-      145deg,
-      rgba(14, 28, 47, 0.96),
-      rgba(10, 21, 36, 0.96)
-    );
+    var(--green-soft);
+}
 
-  box-shadow: var(--shadow);
+.connection-status.connected
+.connection-dot {
+  background: var(--green);
+
+  box-shadow:
+    0 0 0 4px var(--green-soft),
+    0 0 14px rgba(34, 197, 94, 0.55);
+}
+
+.connection-status.connecting {
+  color: #fcd34d;
+
+  border-color:
+    rgba(245, 158, 11, 0.25);
+
+  background:
+    var(--yellow-soft);
+}
+
+/* =========================================
+   SECTION
+========================================= */
+
+section {
+  margin-bottom: 24px;
 }
 
 .section-header {
   display: flex;
-  align-items: flex-start;
+
+  align-items: center;
   justify-content: space-between;
 
-  gap: 20px;
+  gap: 16px;
 
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .section-header h2 {
-  margin: 0 0 6px;
+  margin: 0;
 
   font-size: 18px;
-  font-weight: 700;
+
+  font-weight: 750;
 
   letter-spacing: -0.2px;
 }
 
 .section-header p {
-  margin: 0;
+  margin: 5px 0 0;
 
   color: var(--text-muted);
 
   font-size: 13px;
 }
 
-/* ================================
-   MARKET SELECTOR
-================================ */
+/* =========================================
+   ANALYSIS CONTROLS
+========================================= */
 
-.market-selector {
+.analysis-controls {
   display: grid;
 
   grid-template-columns:
@@ -325,99 +349,152 @@ option {
 
   gap: 16px;
 
-  margin-bottom: 18px;
+  padding: 22px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-lg);
+
+  background:
+    rgba(13, 27, 46, 0.88);
+
+  box-shadow: var(--shadow);
 }
 
-.selector-group,
+.analysis-controls
+.section-header {
+  grid-column: 1 / -1;
+
+  margin-bottom: 2px;
+}
+
 .control-group {
   display: flex;
+
   flex-direction: column;
 
   gap: 8px;
 }
 
-.selector-group label,
 .control-group label {
   color: var(--text-secondary);
 
   font-size: 12px;
-  font-weight: 650;
+
+  font-weight: 700;
 
   letter-spacing: 0.2px;
 }
 
-.analysis-controls > .control-group {
-  max-width: 33.33%;
+/* =========================================
+   MARKET SELECTOR
+========================================= */
+
+.market-selector {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+
+  gap: 16px;
+
+  padding: 20px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-lg);
+
+  background: var(--card);
+
+  box-shadow: var(--shadow);
 }
 
-/* ================================
-   MARKET GRID
-================================ */
+.selector-group {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+.selector-group label {
+  color: var(--text-secondary);
+
+  font-size: 12px;
+
+  font-weight: 700;
+}
+
+/* =========================================
+   MARKET OVERVIEW
+========================================= */
+
+.market-overview {
+  margin-top: 24px;
+}
 
 .market-grid {
   display: grid;
 
   grid-template-columns:
-    repeat(auto-fit, minmax(280px, 1fr));
+    repeat(3, minmax(0, 1fr));
 
-  gap: 16px;
+  gap: 18px;
 }
 
-/* ================================
+/* =========================================
    MARKET CARD
-================================ */
+========================================= */
 
 .market-card {
   position: relative;
 
-  overflow: hidden;
-
   padding: 22px;
 
   border: 1px solid var(--border);
-  border-radius: 13px;
+
+  border-radius: var(--radius-lg);
 
   background:
     linear-gradient(
       145deg,
-      rgba(18, 36, 58, 0.92),
-      rgba(10, 23, 39, 0.95)
+      rgba(16, 34, 56, 0.95),
+      rgba(10, 24, 42, 0.95)
     );
+
+  box-shadow: var(--shadow);
+
+  overflow: hidden;
 
   transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-.market-card::before {
-  content: "";
-
-  position: absolute;
-
-  left: 0;
-  top: 0;
-
-  width: 100%;
-  height: 2px;
-
-  background:
-    linear-gradient(
-      90deg,
-      var(--primary),
-      var(--purple)
-    );
-
-  opacity: 0.8;
+    transform var(--transition),
+    border-color var(--transition);
 }
 
 .market-card:hover {
   transform: translateY(-2px);
 
   border-color:
-    rgba(96, 165, 250, 0.25);
+    rgba(59, 130, 246, 0.3);
+}
 
-  background: var(--card-hover);
+.market-card::after {
+  content: "";
+
+  position: absolute;
+
+  width: 140px;
+  height: 140px;
+
+  right: -70px;
+  top: -70px;
+
+  border-radius: 50%;
+
+  background:
+    rgba(59, 130, 246, 0.07);
+
+  pointer-events: none;
 }
 
 .market-card-header {
@@ -426,19 +503,22 @@ option {
   align-items: flex-start;
   justify-content: space-between;
 
-  gap: 16px;
-
-  margin-bottom: 28px;
+  gap: 12px;
 }
 
 .market-card-header h3 {
-  margin: 0 0 5px;
+  margin: 0;
 
   font-size: 16px;
-  font-weight: 700;
+
+  font-weight: 750;
 }
 
 .market-card-header span {
+  display: block;
+
+  margin-top: 5px;
+
   color: var(--text-muted);
 
   font-size: 12px;
@@ -446,86 +526,104 @@ option {
 
 .signal-status {
   display: inline-flex;
+
   align-items: center;
   justify-content: center;
 
-  min-width: 62px;
+  min-width: 64px;
 
   padding: 6px 10px;
 
-  border-radius: 7px;
+  border-radius: 999px;
 
   font-size: 11px;
-  font-weight: 750;
+
+  font-weight: 800;
 
   letter-spacing: 0.4px;
 }
 
 .signal-status.buy {
-  color: var(--green);
+  color: #86efac;
+
   background: var(--green-soft);
+
+  border: 1px solid
+    rgba(34, 197, 94, 0.22);
 }
 
 .signal-status.sell {
-  color: var(--red);
+  color: #fca5a5;
+
   background: var(--red-soft);
+
+  border: 1px solid
+    rgba(239, 68, 68, 0.22);
 }
 
 .signal-status.wait {
-  color: var(--yellow);
+  color: #fcd34d;
+
   background: var(--yellow-soft);
+
+  border: 1px solid
+    rgba(245, 158, 11, 0.22);
 }
 
-/* ================================
-   PREDICTION
-================================ */
-
 .prediction {
-  display: flex;
-  flex-direction: column;
+  margin-top: 28px;
 
-  gap: 8px;
+  padding-top: 18px;
 
-  margin-bottom: 25px;
+  border-top: 1px solid var(--border);
 }
 
 .prediction span {
+  display: block;
+
   color: var(--text-muted);
 
   font-size: 12px;
+
+  margin-bottom: 7px;
 }
 
 .prediction strong {
-  font-size: 25px;
-  font-weight: 750;
+  font-size: 23px;
 
-  letter-spacing: -0.5px;
+  font-weight: 800;
+
+  letter-spacing: -0.4px;
 }
 
-/* ================================
-   CONFIDENCE
-================================ */
+.confidence {
+  margin-top: 22px;
+}
 
 .confidence-header {
   display: flex;
 
   justify-content: space-between;
 
-  margin-bottom: 9px;
-}
+  align-items: center;
 
-.confidence-header span {
-  color: var(--text-muted);
+  margin-bottom: 9px;
 
   font-size: 12px;
+
+  color: var(--text-secondary);
 }
 
 .confidence-header strong {
+  color: var(--text);
+
   font-size: 13px;
 }
 
-.confidence-bar {
+.confidence-bar,
+.digit-bar {
   width: 100%;
+
   height: 7px;
 
   overflow: hidden;
@@ -544,22 +642,40 @@ option {
     linear-gradient(
       90deg,
       var(--primary),
-      var(--primary-light)
+      var(--purple)
     );
 
-  transition: width 0.4s ease;
+  transition:
+    width 0.4s ease;
 }
 
-/* ================================
-   SIGNAL LISTS
-================================ */
+/* =========================================
+   TOP SIGNALS
+========================================= */
+
+.top-signals,
+.signal-history,
+.recent-ticks,
+.digit-stats {
+  padding: 22px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-lg);
+
+  background:
+    rgba(13, 27, 46, 0.88);
+
+  box-shadow: var(--shadow);
+}
 
 .signals-list,
 .history-list {
   display: flex;
+
   flex-direction: column;
 
-  gap: 9px;
+  gap: 10px;
 }
 
 .signal-row,
@@ -569,35 +685,39 @@ option {
   grid-template-columns:
     minmax(0, 1fr)
     auto
-    auto;
+    90px;
 
   align-items: center;
 
-  gap: 20px;
+  gap: 16px;
 
   padding: 15px 16px;
 
   border: 1px solid var(--border);
-  border-radius: 10px;
 
-  background: rgba(255, 255, 255, 0.018);
+  border-radius: var(--radius-md);
+
+  background:
+    rgba(255, 255, 255, 0.025);
 
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
+    background var(--transition),
+    border-color var(--transition);
 }
 
 .signal-row:hover,
 .history-row:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background:
+    rgba(255, 255, 255, 0.045);
 
   border-color:
-    rgba(148, 163, 184, 0.2);
+    var(--border-strong);
 }
 
 .signal-market,
 .history-market {
   display: flex;
+
   flex-direction: column;
 
   gap: 4px;
@@ -607,35 +727,34 @@ option {
 
 .signal-market strong,
 .history-market strong {
+  font-size: 14px;
+
+  white-space: nowrap;
+
   overflow: hidden;
 
-  color: var(--text);
-
-  font-size: 13px;
-  font-weight: 650;
-
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .signal-market span,
 .history-market span {
   color: var(--text-muted);
 
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .signal-confidence,
 .history-confidence {
-  color: var(--primary-light);
+  text-align: right;
+
+  font-weight: 800;
 
   font-size: 14px;
-  font-weight: 700;
 }
 
-/* ================================
+/* =========================================
    DIGIT STATISTICS
-================================ */
+========================================= */
 
 .digit-grid {
   display: grid;
@@ -653,12 +772,14 @@ option {
 
   gap: 13px;
 
-  padding: 12px;
+  padding: 12px 14px;
 
   border: 1px solid var(--border);
-  border-radius: 10px;
 
-  background: rgba(255, 255, 255, 0.018);
+  border-radius: var(--radius-md);
+
+  background:
+    rgba(255, 255, 255, 0.022);
 }
 
 .digit-number {
@@ -667,24 +788,21 @@ option {
   align-items: center;
   justify-content: center;
 
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
 
-  flex-shrink: 0;
+  flex: 0 0 38px;
 
-  border-radius: 8px;
+  border-radius: 10px;
 
   background:
-    linear-gradient(
-      145deg,
-      rgba(59, 130, 246, 0.18),
-      rgba(139, 92, 246, 0.12)
-    );
+    var(--primary-soft);
 
-  color: var(--primary-light);
+  color: #93c5fd;
 
-  font-size: 14px;
-  font-weight: 750;
+  font-size: 16px;
+
+  font-weight: 800;
 }
 
 .digit-info {
@@ -696,8 +814,9 @@ option {
 .digit-count {
   display: flex;
 
-  align-items: center;
   justify-content: space-between;
+
+  align-items: center;
 
   margin-bottom: 7px;
 }
@@ -707,20 +826,13 @@ option {
 }
 
 .digit-count span {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .digit-bar {
-  width: 100%;
-  height: 5px;
-
-  overflow: hidden;
-
-  border-radius: 999px;
-
-  background: rgba(255, 255, 255, 0.06);
+  height: 6px;
 }
 
 .digit-bar-fill {
@@ -732,28 +844,29 @@ option {
     linear-gradient(
       90deg,
       var(--primary),
-      var(--purple)
+      #60a5fa
     );
 
-  transition: width 0.35s ease;
+  transition:
+    width 0.35s ease;
 }
 
-/* ================================
+/* =========================================
    RECENT TICKS
-================================ */
+========================================= */
 
 .ticks-list {
   display: flex;
 
   flex-wrap: wrap;
 
-  gap: 7px;
+  gap: 8px;
 
-  max-height: 180px;
+  max-height: 220px;
 
   overflow-y: auto;
 
-  padding: 3px;
+  padding: 4px;
 }
 
 .tick-digit {
@@ -762,43 +875,40 @@ option {
   align-items: center;
   justify-content: center;
 
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
+
+  border-radius: 9px;
 
   border: 1px solid var(--border);
 
-  border-radius: 8px;
-
   background:
-    linear-gradient(
-      145deg,
-      rgba(255, 255, 255, 0.04),
-      rgba(255, 255, 255, 0.015)
-    );
+    rgba(255, 255, 255, 0.035);
 
   color: var(--text);
 
   font-size: 13px;
-  font-weight: 700;
+
+  font-weight: 800;
 
   transition:
-    transform 0.15s ease,
-    background 0.15s ease;
+    transform var(--transition),
+    background var(--transition);
 }
 
 .tick-digit:hover {
   transform: translateY(-2px);
 
   background:
-    rgba(59, 130, 246, 0.14);
+    var(--primary-soft);
 
   border-color:
-    rgba(96, 165, 250, 0.3);
+    rgba(59, 130, 246, 0.25);
 }
 
-/* ================================
+/* =========================================
    EMPTY STATE
-================================ */
+========================================= */
 
 .empty-state {
   display: flex;
@@ -806,27 +916,63 @@ option {
   align-items: center;
   justify-content: center;
 
-  min-height: 80px;
+  min-height: 90px;
 
   padding: 20px;
 
-  border: 1px dashed var(--border-strong);
+  border: 1px dashed
+    rgba(148, 163, 184, 0.18);
 
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 
   color: var(--text-muted);
+
+  background:
+    rgba(255, 255, 255, 0.018);
 
   font-size: 13px;
 
   text-align: center;
 }
 
-/* ================================
+/* =========================================
+   SCROLLBAR
+========================================= */
+
+* {
+  scrollbar-width: thin;
+
+  scrollbar-color:
+    rgba(148, 163, 184, 0.22)
+    transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background:
+    rgba(148, 163, 184, 0.22);
+
+  border-radius: 999px;
+}
+
+/* =========================================
    FOOTER
-================================ */
+========================================= */
 
 .dashboard-footer {
-  padding: 25px 10px 5px;
+  margin-top: 32px;
+
+  padding: 20px;
+
+  border-top: 1px solid var(--border);
 
   color: var(--text-muted);
 
@@ -837,40 +983,20 @@ option {
 
 .dashboard-footer strong {
   color: var(--text-secondary);
-
-  font-weight: 650;
 }
 
-/* ================================
-   SCROLLBARS
-================================ */
+/* =========================================
+   RESPONSIVE — TABLET
+========================================= */
 
-::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-
-  background: rgba(148, 163, 184, 0.2);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.3);
-}
-
-/* ================================
-   TABLET
-================================ */
-
-@media (max-width: 900px) {
+@media (max-width: 1000px) {
   .dashboard {
-    padding: 22px 18px 40px;
+    padding: 22px;
+  }
+
+  .analysis-controls {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
   }
 
   .market-selector {
@@ -878,23 +1004,22 @@ option {
       repeat(2, minmax(0, 1fr));
   }
 
-  .analysis-controls > .control-group {
-    max-width: 50%;
-  }
-
-  .digit-grid {
+  .market-grid {
     grid-template-columns:
       repeat(2, minmax(0, 1fr));
   }
 }
 
-/* ================================
-   MOBILE
-================================ */
+/* =========================================
+   RESPONSIVE — MOBILE
+========================================= */
 
-@media (max-width: 640px) {
+@media (max-width: 680px) {
   .dashboard {
-    padding: 12px 10px 30px;
+    padding:
+      14px
+      14px
+      35px;
   }
 
   .dashboard-header {
@@ -902,59 +1027,48 @@ option {
 
     flex-direction: column;
 
-    padding: 19px;
+    padding: 20px;
 
-    gap: 16px;
+    gap: 18px;
   }
 
   .dashboard-header h1 {
     font-size: 24px;
   }
 
-  .dashboard-header p {
-    font-size: 12px;
-
-    line-height: 1.5;
-  }
-
   .connection-status {
     align-self: flex-start;
   }
 
-  .analysis-controls,
-  .market-overview,
-  .top-signals,
-  .digit-stats,
-  .recent-ticks,
-  .signal-history {
+  .analysis-controls {
+    grid-template-columns: 1fr;
+
     padding: 17px;
-
-    margin-bottom: 14px;
   }
 
+  .analysis-controls
   .section-header {
-    margin-bottom: 16px;
-  }
-
-  .section-header h2 {
-    font-size: 16px;
-  }
-
-  .section-header p {
-    line-height: 1.5;
+    margin-bottom: 0;
   }
 
   .market-selector {
     grid-template-columns: 1fr;
 
-    gap: 12px;
-  }
-
-  .analysis-controls > .control-group {
-    max-width: 100%;
+    padding: 17px;
   }
 
   .market-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .top-signals,
+  .signal-history,
+  .recent-ticks,
+  .digit-stats {
+    padding: 17px;
+  }
+
+  .digit-grid {
     grid-template-columns: 1fr;
   }
 
@@ -970,18 +1084,37 @@ option {
   .signal-confidence,
   .history-confidence {
     grid-column: 2;
+
+    grid-row: 1;
+
+    text-align: right;
+  }
+}
+
+/* =========================================
+   VERY SMALL SCREENS
+========================================= */
+
+@media (max-width: 420px) {
+  .dashboard {
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
-  .digit-grid {
-    grid-template-columns: 1fr;
+  .dashboard-header {
+    border-radius: 14px;
   }
 
-  .ticks-list {
-    max-height: 150px;
+  .market-card {
+    padding: 18px;
+  }
+
+  .section-header h2 {
+    font-size: 16px;
   }
 
   .tick-digit {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
 }
