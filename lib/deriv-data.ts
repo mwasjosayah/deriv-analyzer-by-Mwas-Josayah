@@ -1,733 +1,126 @@
 import { DerivAnalysisEngine } from "./deriv-engine";
 
-export interface DerivTick {
-  quote: number;
-  epoch: number;
-  digit: number;
-  symbol: string;
-}
-
-type DigitListener = (digit: number) => void;
-
-type TickListener = (
-  tick: DerivTick
-) => void;
-
-type Status =
+type DerivStatus =
   | "connecting"
   | "connected"
   | "disconnected"
   | "error";
 
-type StatusListener = (
-  status: Status
-) => void;
+interface DerivTickResponse {
+  msg_type?: string;
+
+  tick?: {
+    symbol?: string;
+    quote?: number | string;
+    epoch?: number;
+  };
+
+  error?: {
+    code?: string;
+    message?: string;
+  };
+}
+
+type DigitListener = (digit: number) => void;
+type StatusListener = (status: DerivStatus) => void;
 
 export class DerivDataManager {
   private socket: WebSocket | null = null;
 
-  private engine: DerivAnalysisEngine;
+  private readonly engine: DerivAnalysisEngine;
 
-  private digitListeners: DigitListener[] = [];
+  private readonly digitListeners: DigitListener[] = [];
 
-  private tickListeners: TickListener[] = [];
-
-  private statusListeners: StatusListener[] = [];
+  private readonly statusListeners: StatusListener[] = [];
 
   private currentSymbol: string | null = null;
 
-  private manuallyDisconnected = false;
+  private isManualDisconnect = false;
 
-  private tickWindow: number;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null =
+    null;
 
-  private historicalLoaded = false;
+  private readonly appId = 1089;
+
+  private readonly websocketUrl =
+    `wss://ws.binaryws.com/websockets/v3?app_id=${this.appId}`;
 
   constructor(
-    engine?: DerivAnalysisEngine,
-    tickWindow: number = 1000
+    engine: DerivAnalysisEngine
   ) {
-    this.tickWindow = tickWindow;
-
-    this.engine =
-      engine ??
-      new DerivAnalysisEngine(
-        tickWindow
-      );
+    this.engine = engine;
   }
 
-  /*
-   * =====================================
-   * CONNECT
-   * =====================================
+  /**
+   * Register a listener for incoming digits.
    */
-
-  connect(symbol: string) {
-    if (
-      typeof window === "undefined"
-    ) {
-      return;
-    }
-
-    /*
-     * Close previous connection.
-     */
-
-    this.disconnect();
-
-    this.currentSymbol = symbol;
-
-    this.manuallyDisconnected = false;
-
-    this.historicalLoaded = false;
-
-    this.setStatus("connecting");
-
-    console.log(
-      "[Deriv] Starting connection:",
-      symbol
-    );
-
-    /*
-     * IMPORTANT:
-     *
-     * app_id=1089 is explicitly included.
-     */
-
-    const socket = new WebSocket(
-      "wss://ws.binaryws.com/websockets/v3?app_id=1089"
-    );
-
-    this.socket = socket;
-
-    /*
-     * =====================================
-     * OPEN
-     * =====================================
-     */
-
-    socket.onopen = () => {
-      console.log(
-        "[Deriv] WebSocket OPEN"
-      );
-
-      /*
-       * Request server time.
-       */
-
-      this.send({
-        time: 1,
-        req_id: 1,
-      });
-
-      /*
-       * Request available symbols.
-       */
-
-      this.send({
-        active_symbols: "brief",
-        product_type: "basic",
-        req_id: 2,
-      });
-
-      /*
-       * Request historical ticks.
-       */
-
-      this.send({
-        ticks_history: symbol,
-        count: this.tickWindow,
-        end: "latest",
-        style: "ticks",
-        subscribe: 0,
-        req_id: 3,
-      });
-
-      /*
-       * Subscribe to live ticks.
-       */
-
-      this.send({
-        ticks: symbol,
-        subscribe: 1,
-        req_id: 4,
-      });
-
-      console.log(
-        "[Deriv] API requests sent:",
-        {
-          symbol,
-          tickWindow:
-            this.tickWindow,
-        }
-      );
-    };
-
-    /*
-     * =====================================
-     * MESSAGE
-     * =====================================
-     */
-
-    socket.onmessage = (
-      event
-    ) => {
-      try {
-        const data = JSON.parse(
-          event.data
-        );
-
-        console.log(
-          "[Deriv] Message:",
-          data
-        );
-
-        /*
-         * =================================
-         * ERROR
-         * =================================
-         */
-
-        if (data.error) {
-          console.error(
-            "[Deriv API ERROR]:",
-            data.error
-          );
-
-          this.setStatus("error");
-
-          return;
-        }
-
-        /*
-         * =================================
-         * SERVER TIME
-         * =================================
-         */
-
-        if (
-          data.msg_type === "time"
-        ) {
-          console.log(
-            "[Deriv] Server time:",
-            data.time
-          );
-
-          return;
-        }
-
-        /*
-         * =================================
-         * ACTIVE SYMBOLS
-         * =================================
-         */
-
-        if (
-          data.msg_type ===
-            "active_symbols" &&
-          Array.isArray(
-            data.active_symbols
-          )
-        ) {
-          console.log(
-            "[Deriv] Active symbols received:",
-            data.active_symbols.length
-          );
-
-          const selectedSymbol =
-            data.active_symbols.find(
-              (item: {
-                symbol?: string;
-              }) =>
-                item.symbol ===
-                symbol
-            );
-
-          if (
-            selectedSymbol
-          ) {
-            console.log(
-              "[Deriv] Selected market confirmed:",
-              selectedSymbol
-            );
-          } else {
-            console.warn(
-              "[Deriv] Selected market was not found:",
-              symbol
-            );
-          }
-
-          return;
-        }
-
-        /*
-         * =================================
-         * HISTORICAL TICKS
-         * =================================
-         */
-
-        if (
-          data.msg_type ===
-            "history" &&
-          data.history &&
-          Array.isArray(
-            data.history.prices
-          )
-        ) {
-          const prices =
-            data.history.prices as number[];
-
-          const pipSize =
-            this.getPipSize(
-              data,
-              prices
-            );
-
-          const digits =
-            prices
-              .map(
-                (price) =>
-                  this.extractDigit(
-                    price,
-                    pipSize
-                  )
-              )
-              .filter(
-                (
-                  digit
-                ): digit is number =>
-                  Number.isInteger(
-                    digit
-                  ) &&
-                  digit >= 0 &&
-                  digit <= 9
-              );
-
-          /*
-           * Reset analysis engine.
-           */
-
-          this.engine.clear();
-
-          /*
-           * Keep only the requested
-           * analysis window.
-           */
-
-          const selectedDigits =
-            digits.slice(
-              -this.tickWindow
-            );
-
-          this.engine.addTicks(
-            selectedDigits
-          );
-
-          this.historicalLoaded =
-            true;
-
-          console.log(
-            "[Deriv] Historical ticks:",
-            prices.length
-          );
-
-          console.log(
-            "[Deriv] Historical digits:",
-            selectedDigits.length
-          );
-
-          console.log(
-            "[Deriv] Engine tick count:",
-            this.engine.getTickCount()
-          );
-
-          /*
-           * Send historical digits
-           * to dashboard.
-           */
-
-          selectedDigits.forEach(
-            (digit) => {
-              this.notifyDigitListeners(
-                digit
-              );
-            }
-          );
-
-          /*
-           * If the live subscription has
-           * already started, the dashboard
-           * is now considered connected.
-           */
-
-          if (
-            this.socket &&
-            this.socket.readyState ===
-              WebSocket.OPEN
-          ) {
-            this.setStatus(
-              "connected"
-            );
-          }
-
-          return;
-        }
-
-        /*
-         * =================================
-         * LIVE TICK
-         * =================================
-         */
-
-        if (
-          data.msg_type === "tick" &&
-          data.tick &&
-          typeof data.tick.quote ===
-            "number"
-        ) {
-          const quote =
-            data.tick.quote;
-
-          const epoch =
-            typeof data.tick.epoch ===
-            "number"
-              ? data.tick.epoch
-              : Math.floor(
-                  Date.now() /
-                    1000
-                );
-
-          const tickSymbol =
-            typeof data.tick.symbol ===
-            "string"
-              ? data.tick.symbol
-              : this.currentSymbol ??
-                "";
-
-          const pipSize =
-            this.getPipSizeFromTick(
-              data.tick,
-              quote
-            );
-
-          const digit =
-            this.extractDigit(
-              quote,
-              pipSize
-            );
-
-          if (
-            !Number.isInteger(
-              digit
-            ) ||
-            digit < 0 ||
-            digit > 9
-          ) {
-            console.warn(
-              "[Deriv] Invalid digit:",
-              {
-                quote,
-                pipSize,
-                digit,
-              }
-            );
-
-            return;
-          }
-
-          const tick: DerivTick = {
-            quote,
-            epoch,
-            digit,
-            symbol:
-              tickSymbol,
-          };
-
-          /*
-           * Add live digit to engine.
-           */
-
-          this.engine.addTick(
-            digit
-          );
-
-          /*
-           * Notify complete tick.
-           */
-
-          this.notifyTickListeners(
-            tick
-          );
-
-          /*
-           * Notify dashboard.
-           */
-
-          this.notifyDigitListeners(
-            digit
-          );
-
-          /*
-           * A valid live tick confirms
-           * that the API is actually
-           * delivering market data.
-           */
-
-          if (
-            this.socket &&
-            this.socket.readyState ===
-              WebSocket.OPEN
-          ) {
-            this.setStatus(
-              "connected"
-            );
-          }
-
-          console.log(
-            "[Deriv] LIVE TICK:",
-            tick
-          );
-
-          return;
-        }
-      } catch (error) {
-        console.error(
-          "[Deriv] Failed to process message:",
-          error
-        );
-      }
-    };
-
-    /*
-     * =====================================
-     * ERROR
-     * =====================================
-     */
-
-    socket.onerror = (
-      error
-    ) => {
-      console.error(
-        "[Deriv] WebSocket ERROR:",
-        error
-      );
-
-      this.setStatus("error");
-    };
-
-    /*
-     * =====================================
-     * CLOSE
-     * =====================================
-     */
-
-    socket.onclose = (
-      event
-    ) => {
-      console.log(
-        "[Deriv] WebSocket CLOSED:",
-        {
-          code:
-            event.code,
-          reason:
-            event.reason,
-          wasClean:
-            event.wasClean,
-        }
-      );
-
-      if (
-        this.socket ===
-        socket
-      ) {
-        this.socket = null;
-      }
-
-      if (
-        !this.manuallyDisconnected
-      ) {
-        this.setStatus(
-          "disconnected"
-        );
-      }
-    };
-  }
-
-  /*
-   * =====================================
-   * SEND
-   * =====================================
-   */
-
-  private send(
-    payload: Record<
-      string,
-      unknown
-    >
-  ) {
-    if (
-      !this.socket ||
-      this.socket.readyState !==
-        WebSocket.OPEN
-    ) {
-      console.warn(
-        "[Deriv] Cannot send. WebSocket is not open."
-      );
-
-      return;
-    }
-
-    try {
-      this.socket.send(
-        JSON.stringify(
-          payload
-        )
-      );
-    } catch (error) {
-      console.error(
-        "[Deriv] Failed to send request:",
-        error
-      );
-    }
-  }
-
-  /*
-   * =====================================
-   * DISCONNECT
-   * =====================================
-   */
-
-  disconnect() {
-    this.manuallyDisconnected =
-      true;
-
-    this.historicalLoaded =
-      false;
-
-    if (this.socket) {
-      try {
-        this.socket.close();
-      } catch (error) {
-        console.error(
-          "[Deriv] Error closing WebSocket:",
-          error
-        );
-      }
-
-      this.socket = null;
-    }
-  }
-
-  /*
-   * =====================================
-   * DIGIT LISTENER
-   * =====================================
-   */
-
   onDigit(
     listener: DigitListener
-  ) {
-    this.digitListeners.push(
-      listener
-    );
+  ): () => void {
+    this.digitListeners.push(listener);
 
     return () => {
-      this.digitListeners =
-        this.digitListeners.filter(
-          (item) =>
-            item !== listener
+      const index =
+        this.digitListeners.indexOf(
+          listener
         );
+
+      if (index !== -1) {
+        this.digitListeners.splice(
+          index,
+          1
+        );
+      }
     };
   }
 
-  /*
-   * =====================================
-   * TICK LISTENER
-   * =====================================
+  /**
+   * Register a listener for connection status.
    */
-
-  onTick(
-    listener: TickListener
-  ) {
-    this.tickListeners.push(
-      listener
-    );
-
-    return () => {
-      this.tickListeners =
-        this.tickListeners.filter(
-          (item) =>
-            item !== listener
-        );
-    };
-  }
-
-  /*
-   * =====================================
-   * STATUS LISTENER
-   * =====================================
-   */
-
   onStatus(
     listener: StatusListener
-  ) {
-    this.statusListeners.push(
-      listener
-    );
+  ): () => void {
+    this.statusListeners.push(listener);
 
     return () => {
-      this.statusListeners =
-        this.statusListeners.filter(
-          (item) =>
-            item !== listener
+      const index =
+        this.statusListeners.indexOf(
+          listener
         );
+
+      if (index !== -1) {
+        this.statusListeners.splice(
+          index,
+          1
+        );
+      }
     };
   }
 
-  /*
-   * =====================================
-   * ENGINE
-   * =====================================
+  /**
+   * Notify all status listeners.
    */
-
-  getEngine() {
-    return this.engine;
+  private notifyStatus(
+    status: DerivStatus
+  ) {
+    this.statusListeners.forEach(
+      (listener) => {
+        try {
+          listener(status);
+        } catch (error) {
+          console.error(
+            "[Deriv] Status listener error:",
+            error
+          );
+        }
+      }
+    );
   }
 
-  /*
-   * =====================================
-   * STATUS
-   * =====================================
+  /**
+   * Notify all digit listeners.
    */
-
-  getStatus(): Status {
-    if (
-      this.socket &&
-      this.socket.readyState ===
-        WebSocket.OPEN
-    ) {
-      return "connected";
-    }
-
-    return "disconnected";
-  }
-
-  /*
-   * =====================================
-   * TICK WINDOW
-   * =====================================
-   */
-
-  getTickWindow() {
-    return this.tickWindow;
-  }
-
-  /*
-   * =====================================
-   * DIGIT NOTIFICATION
-   * =====================================
-   */
-
-  private notifyDigitListeners(
+  private notifyDigit(
     digit: number
   ) {
     this.digitListeners.forEach(
@@ -744,198 +137,493 @@ export class DerivDataManager {
     );
   }
 
-  /*
-   * =====================================
-   * TICK NOTIFICATION
-   * =====================================
+  /**
+   * Connect to Deriv and subscribe to ticks.
    */
-
-  private notifyTickListeners(
-    tick: DerivTick
-  ) {
-    this.tickListeners.forEach(
-      (listener) => {
-        try {
-          listener(tick);
-        } catch (error) {
-          console.error(
-            "[Deriv] Tick listener error:",
-            error
-          );
-        }
-      }
-    );
-  }
-
-  /*
-   * =====================================
-   * STATUS NOTIFICATION
-   * =====================================
-   */
-
-  private setStatus(
-    status: Status
-  ) {
-    this.statusListeners.forEach(
-      (listener) => {
-        try {
-          listener(status);
-        } catch (error) {
-          console.error(
-            "[Deriv] Status listener error:",
-            error
-          );
-        }
-      }
-    );
-  }
-
-  /*
-   * =====================================
-   * PIP SIZE
-   * =====================================
-   */
-
-  private getPipSize(
-    data: any,
-    prices: number[]
+  connect(
+    symbol: string
   ) {
     if (
-      typeof data.pip_size ===
-      "number"
+      typeof window === "undefined"
     ) {
-      return data.pip_size;
+      return;
     }
 
-    return this.guessPipSize(
-      prices
-    );
-  }
+    this.currentSymbol = symbol;
 
-  private getPipSizeFromTick(
-    tick: any,
-    quote: number
-  ) {
+    this.isManualDisconnect = false;
+
+    this.clearReconnectTimer();
+
+    /*
+     * Close an existing connection
+     * before creating a new one.
+     */
     if (
-      typeof tick.pip_size ===
-      "number"
+      this.socket &&
+      (
+        this.socket.readyState ===
+          WebSocket.OPEN ||
+        this.socket.readyState ===
+          WebSocket.CONNECTING
+      )
     ) {
-      return tick.pip_size;
-    }
-
-    return this.guessPipSizeFromQuote(
-      quote
-    );
-  }
-
-  /*
-   * =====================================
-   * GUESS PIP SIZE
-   * =====================================
-   */
-
-  private guessPipSize(
-    prices: number[]
-  ) {
-    if (
-      prices.length === 0
-    ) {
-      return 1;
-    }
-
-    const sample =
-      prices[
-        prices.length - 1
-      ];
-
-    return this.guessPipSizeFromQuote(
-      sample
-    );
-  }
-
-  private guessPipSizeFromQuote(
-    quote: number
-  ) {
-    const text =
-      String(quote);
-
-    if (
-      text.includes("e-")
-    ) {
-      const exponent =
-        Number(
-          text.split("e-")[1]
-        );
-
-      if (
-        Number.isFinite(
-          exponent
-        )
-      ) {
-        return Math.pow(
-          10,
-          -exponent
+      try {
+        this.socket.close();
+      } catch (error) {
+        console.error(
+          "[Deriv] Error closing previous socket:",
+          error
         );
       }
     }
 
-    const decimalIndex =
-      text.indexOf(".");
-
-    if (
-      decimalIndex === -1
-    ) {
-      return 1;
-    }
-
-    const decimalPlaces =
-      text.length -
-      decimalIndex -
-      1;
-
-    return Math.pow(
-      10,
-      -decimalPlaces
+    this.notifyStatus(
+      "connecting"
     );
+
+    console.log(
+      "[Deriv] Connecting to:",
+      this.websocketUrl
+    );
+
+    console.log(
+      "[Deriv] Requested symbol:",
+      symbol
+    );
+
+    try {
+      this.socket = new WebSocket(
+        this.websocketUrl
+      );
+
+      this.socket.onopen = () => {
+        console.log(
+          "[Deriv] WebSocket connected"
+        );
+
+        this.notifyStatus(
+          "connected"
+        );
+
+        this.subscribeToTicks(
+          symbol
+        );
+      };
+
+      this.socket.onmessage = (
+        event
+      ) => {
+        this.handleMessage(
+          event.data
+        );
+      };
+
+      this.socket.onerror = (
+        error
+      ) => {
+        console.error(
+          "[Deriv] WebSocket error:",
+          error
+        );
+
+        this.notifyStatus(
+          "error"
+        );
+      };
+
+      this.socket.onclose = (
+        event
+      ) => {
+        console.log(
+          "[Deriv] WebSocket closed:",
+          event.code,
+          event.reason
+        );
+
+        this.socket = null;
+
+        this.notifyStatus(
+          "disconnected"
+        );
+
+        /*
+         * Only reconnect when the
+         * disconnect was unexpected.
+         */
+        if (
+          !this.isManualDisconnect &&
+          this.currentSymbol
+        ) {
+          this.scheduleReconnect();
+        }
+      };
+    } catch (error) {
+      console.error(
+        "[Deriv] Failed to create WebSocket:",
+        error
+      );
+
+      this.socket = null;
+
+      this.notifyStatus(
+        "error"
+      );
+    }
   }
 
-  /*
-   * =====================================
-   * EXTRACT LAST DIGIT
-   * =====================================
+  /**
+   * Subscribe to live ticks.
    */
-
-  private extractDigit(
-    price: number,
-    pipSize: number
+  private subscribeToTicks(
+    symbol: string
   ) {
     if (
-      !Number.isFinite(price)
+      !this.socket ||
+      this.socket.readyState !==
+        WebSocket.OPEN
     ) {
-      return NaN;
+      console.error(
+        "[Deriv] Cannot subscribe: socket is not open"
+      );
+
+      return;
     }
 
+    const request = {
+      ticks: symbol,
+      subscribe: 1,
+    };
+
+    console.log(
+      "[Deriv] Subscribing to:",
+      symbol
+    );
+
+    try {
+      this.socket.send(
+        JSON.stringify(request)
+      );
+    } catch (error) {
+      console.error(
+        "[Deriv] Failed to subscribe:",
+        error
+      );
+
+      this.notifyStatus(
+        "error"
+      );
+    }
+  }
+
+  /**
+   * Process messages received from Deriv.
+   */
+  private handleMessage(
+    rawMessage: unknown
+  ) {
     if (
-      !Number.isFinite(
-        pipSize
-      ) ||
-      pipSize <= 0
+      typeof rawMessage !==
+      "string"
     ) {
-      return NaN;
+      return;
+    }
+
+    let data: DerivTickResponse;
+
+    try {
+      data =
+        JSON.parse(
+          rawMessage
+        ) as DerivTickResponse;
+    } catch (error) {
+      console.error(
+        "[Deriv] Failed to parse message:",
+        error
+      );
+
+      return;
     }
 
     /*
-     * Convert the quote into the
-     * smallest displayed price unit.
+     * Deriv API error.
      */
-
-    const scaled =
-      Math.round(
-        price / pipSize
+    if (data.error) {
+      console.error(
+        "[Deriv] API error:",
+        data.error.code,
+        data.error.message
       );
 
-    return Math.abs(
-      scaled
-    ) % 10;
+      this.notifyStatus(
+        "error"
+      );
+
+      return;
+    }
+
+    /*
+     * We only process tick
+     * messages here.
+     */
+    if (
+      data.msg_type !== "tick" ||
+      !data.tick
+    ) {
+      return;
+    }
+
+    const quote =
+      data.tick.quote;
+
+    if (
+      quote === undefined ||
+      quote === null
+    ) {
+      return;
+    }
+
+    const digit =
+      this.extractLastDigit(
+        quote
+      );
+
+    if (digit === null) {
+      return;
+    }
+
+    console.log(
+      "[Deriv] Tick:",
+      quote,
+      "Digit:",
+      digit
+    );
+
+    /*
+     * Store the digit inside
+     * the analysis engine.
+     */
+    this.engine.addTick(
+      digit
+    );
+
+    /*
+     * Notify the dashboard.
+     */
+    this.notifyDigit(
+      digit
+    );
+  }
+
+  /**
+   * Extract the final decimal digit
+   * from a Deriv quote.
+   */
+  private extractLastDigit(
+    quote: number | string
+  ): number | null {
+    const quoteString =
+      String(quote);
+
+    /*
+     * Remove scientific notation
+     * problems by first checking
+     * the decimal portion.
+     */
+    if (
+      quoteString.includes(".")
+    ) {
+      const decimalPart =
+        quoteString.split(
+          "."
+        )[1];
+
+      if (
+        decimalPart &&
+        decimalPart.length > 0
+      ) {
+        const lastCharacter =
+          decimalPart[
+            decimalPart.length - 1
+          ];
+
+        const digit =
+          Number(
+            lastCharacter
+          );
+
+        if (
+          Number.isInteger(
+            digit
+          ) &&
+          digit >= 0 &&
+          digit <= 9
+        ) {
+          return digit;
+        }
+      }
+    }
+
+    /*
+     * Fallback for integer-like
+     * quote values.
+     */
+    const digits =
+      quoteString.match(
+        /\d/g
+      );
+
+    if (
+      !digits ||
+      digits.length === 0
+    ) {
+      return null;
+    }
+
+    const lastDigit =
+      Number(
+        digits[
+          digits.length - 1
+        ]
+      );
+
+    if (
+      !Number.isInteger(
+        lastDigit
+      ) ||
+      lastDigit < 0 ||
+      lastDigit > 9
+    ) {
+      return null;
+    }
+
+    return lastDigit;
+  }
+
+  /**
+   * Schedule a reconnect after
+   * an unexpected disconnect.
+   */
+  private scheduleReconnect() {
+    this.clearReconnectTimer();
+
+    this.reconnectTimer =
+      setTimeout(() => {
+        if (
+          this.currentSymbol &&
+          !this.isManualDisconnect
+        ) {
+          console.log(
+            "[Deriv] Attempting reconnect..."
+          );
+
+          this.connect(
+            this.currentSymbol
+          );
+        }
+      }, 3000);
+  }
+
+  /**
+   * Clear pending reconnect.
+   */
+  private clearReconnectTimer() {
+    if (
+      this.reconnectTimer !==
+      null
+    ) {
+      clearTimeout(
+        this.reconnectTimer
+      );
+
+      this.reconnectTimer =
+        null;
+    }
+  }
+
+  /**
+   * Disconnect from Deriv.
+   */
+  disconnect() {
+    console.log(
+      "[Deriv] Disconnecting..."
+    );
+
+    this.isManualDisconnect =
+      true;
+
+    this.currentSymbol =
+      null;
+
+    this.clearReconnectTimer();
+
+    if (this.socket) {
+      try {
+        /*
+         * Unsubscribe from ticks
+         * before closing when possible.
+         */
+        if (
+          this.socket.readyState ===
+          WebSocket.OPEN
+        ) {
+          try {
+            this.socket.send(
+              JSON.stringify({
+                forget_all: "ticks",
+              })
+            );
+          } catch (error) {
+            console.error(
+              "[Deriv] Failed to forget ticks:",
+              error
+            );
+          }
+        }
+
+        this.socket.close();
+      } catch (error) {
+        console.error(
+          "[Deriv] Disconnect error:",
+          error
+        );
+      }
+
+      this.socket =
+        null;
+    }
+
+    this.notifyStatus(
+      "disconnected"
+    );
+  }
+
+  /**
+   * Return the analysis engine.
+   */
+  getEngine() {
+    return this.engine;
+  }
+
+  /**
+   * Return whether the WebSocket
+   * is currently connected.
+   */
+  isConnected(): boolean {
+    return (
+      this.socket !== null &&
+      this.socket.readyState ===
+        WebSocket.OPEN
+    );
+  }
+
+  /**
+   * Return the currently selected
+   * market symbol.
+   */
+  getCurrentSymbol():
+    | string
+    | null {
+    return this.currentSymbol;
   }
 }
