@@ -16,6 +16,9 @@ import { DerivDataManager } from "../lib/deriv-data";
 
 const DEFAULT_SYMBOL = "R_100";
 
+const DEFAULT_MARKET_NAME =
+  "Volatility 100 Index";
+
 export default function Home() {
   const [latestDigits, setLatestDigits] =
     useState<number[]>([]);
@@ -61,35 +64,36 @@ export default function Home() {
     return counts;
   }, [latestDigits]);
 
+  /*
+   * One Over/Under analysis per market.
+   *
+   * The actual prediction engine will later decide:
+   *
+   * OVER 2
+   * OR
+   * UNDER 7
+   *
+   * We are intentionally keeping this as WAIT until
+   * the real analysis engine is connected.
+   */
+  const prediction = "OVER / UNDER";
+
+  const confidence = 0;
+
+  const status = "WAIT" as const;
+
   const signals = [
     {
-      market: "Over 2",
-      prediction: "OVER 2",
-      confidence: 0,
-      status: "WAIT" as const,
-    },
-    {
-      market: "Under 7",
-      prediction: "UNDER 7",
-      confidence: 0,
-      status: "WAIT" as const,
-    },
-    {
-      market: "Even",
-      prediction: "EVEN",
-      confidence: 0,
-      status: "WAIT" as const,
-    },
-    {
-      market: "Odd",
-      prediction: "ODD",
-      confidence: 0,
-      status: "WAIT" as const,
+      market: DEFAULT_MARKET_NAME,
+      prediction,
+      confidence,
+      status,
     },
   ];
 
   return (
     <main className="dashboard">
+      {/* HEADER */}
       <header className="dashboard-header">
         <div>
           <h1>Deriv Analysis</h1>
@@ -102,7 +106,9 @@ export default function Home() {
 
         <div
           className={`connection-status ${
-            isConnected ? "connected" : "connecting"
+            isConnected
+              ? "connected"
+              : "connecting"
           }`}
         >
           <span className="connection-dot" />
@@ -113,6 +119,7 @@ export default function Home() {
         </div>
       </header>
 
+      {/* MARKET OVERVIEW */}
       <section className="market-overview">
         <div className="section-header">
           <div>
@@ -127,47 +134,28 @@ export default function Home() {
 
         <div className="market-grid">
           <MarketCard
-            market="Over 2"
+            market={DEFAULT_MARKET_NAME}
             symbol="Volatility 100 Index"
-            prediction="OVER 2"
-            confidence={0}
-            status="WAIT"
-          />
-
-          <MarketCard
-            market="Under 7"
-            symbol="Volatility 100 Index"
-            prediction="UNDER 7"
-            confidence={0}
-            status="WAIT"
-          />
-
-          <MarketCard
-            market="Even"
-            symbol="Volatility 100 Index"
-            prediction="EVEN"
-            confidence={0}
-            status="WAIT"
-          />
-
-          <MarketCard
-            market="Odd"
-            symbol="Volatility 100 Index"
-            prediction="ODD"
-            confidence={0}
-            status="WAIT"
+            prediction={prediction}
+            confidence={confidence}
+            status={status}
           />
         </div>
       </section>
 
+      {/* TOP SIGNALS */}
       <TopSignals signals={signals} />
 
+      {/* DIGIT STATISTICS */}
       <DigitStats digits={digitCounts} />
 
+      {/* RECENT TICKS */}
       <RecentTicks digits={latestDigits} />
 
+      {/* SIGNAL HISTORY */}
       <SignalHistory signals={[]} />
 
+      {/* FOOTER */}
       <footer className="dashboard-footer">
         Analysis made by{" "}
         <strong>Mwas Josayah</strong>
