@@ -98,106 +98,127 @@ const TICK_WINDOWS = [
 ];
 
 export default function Home() {
-  const [selectedMarket, setSelectedMarket] =
-    useState<MarketOption>(MARKETS[4]);
+  const [
+    selectedMarket,
+    setSelectedMarket,
+  ] = useState<MarketOption>(
+    MARKETS[4]
+  );
 
-  const [analysisType, setAnalysisType] =
-    useState<AnalysisType>("OVER_UNDER");
+  const [
+    analysisType,
+    setAnalysisType,
+  ] = useState<AnalysisType>(
+    "OVER_UNDER"
+  );
 
-  const [tickWindow, setTickWindow] =
-    useState(1000);
+  const [
+    tickWindow,
+    setTickWindow,
+  ] = useState(1000);
 
-  const [targetDigit, setTargetDigit] =
-    useState(7);
+  const [
+    targetDigit,
+    setTargetDigit,
+  ] = useState(7);
 
-  const [latestDigits, setLatestDigits] =
-    useState<number[]>([]);
+  const [
+    latestDigits,
+    setLatestDigits,
+  ] = useState<number[]>([]);
 
-  const [isConnected, setIsConnected] =
-    useState(false);
+  const [
+    isConnected,
+    setIsConnected,
+  ] = useState(false);
 
   /*
-   * Create the analysis engine and
-   * Deriv data manager.
+   * Create the analysis engine
+   * for the selected window.
    */
   const dataManager = useMemo(() => {
     const engine =
-      new DerivAnalysisEngine(tickWindow);
+      new DerivAnalysisEngine(
+        tickWindow
+      );
 
-    return new DerivDataManager(engine);
+    return new DerivDataManager(
+      engine
+    );
   }, [tickWindow]);
 
   /*
-   * Connect to the selected Deriv market.
+   * Connect to Deriv.
    *
    * IMPORTANT:
-   * Listeners are registered BEFORE connect()
-   * so that we don't miss the initial status.
+   * Listeners are registered BEFORE
+   * connect() is called.
    */
   useEffect(() => {
-    let mounted = true;
-
     setIsConnected(false);
+
     setLatestDigits([]);
 
     /*
-     * Listen for WebSocket status BEFORE
-     * starting the connection.
+     * Register status listener FIRST.
      */
     const unsubscribeStatus =
-      dataManager.onStatus((status) => {
-        if (!mounted) return;
+      dataManager.onStatus(
+        (status) => {
+          console.log(
+            "[Dashboard] Deriv status:",
+            status
+          );
 
-        console.log(
-          "[Dashboard] Deriv status:",
-          status
-        );
+          if (
+            status ===
+            "connected"
+          ) {
+            setIsConnected(
+              true
+            );
+          }
 
-        if (status === "connected") {
-          setIsConnected(true);
+          if (
+            status ===
+              "disconnected" ||
+            status === "error"
+          ) {
+            setIsConnected(
+              false
+            );
+          }
         }
-
-        if (
-          status === "connecting"
-        ) {
-          setIsConnected(false);
-        }
-
-        if (
-          status === "disconnected" ||
-          status === "error"
-        ) {
-          setIsConnected(false);
-        }
-      });
+      );
 
     /*
-     * Listen for incoming digits.
+     * Register digit listener.
      */
     const unsubscribeDigit =
-      dataManager.onDigit((digit) => {
-        if (!mounted) return;
-
-        console.log(
-          "[Dashboard] New digit:",
-          digit
-        );
-
-        setLatestDigits((previous) => {
-          const updated = [
-            ...previous,
-            digit,
-          ];
-
-          return updated.slice(
-            -tickWindow
+      dataManager.onDigit(
+        (digit) => {
+          console.log(
+            "[Dashboard] Digit:",
+            digit
           );
-        });
-      });
+
+          setLatestDigits(
+            (previous) => {
+              const updated = [
+                ...previous,
+                digit,
+              ];
+
+              return updated.slice(
+                -tickWindow
+              );
+            }
+          );
+        }
+      );
 
     /*
-     * Start the WebSocket connection
-     * AFTER listeners are ready.
+     * NOW connect.
      */
     console.log(
       "[Dashboard] Connecting to:",
@@ -213,8 +234,6 @@ export default function Home() {
      * Cleanup.
      */
     return () => {
-      mounted = false;
-
       unsubscribeStatus();
       unsubscribeDigit();
 
@@ -230,17 +249,24 @@ export default function Home() {
    * Calculate digit distribution.
    */
   const digitCounts = useMemo(() => {
-    const counts = Array(10).fill(0);
+    const counts =
+      Array(10).fill(
+        0
+      ) as number[];
 
-    latestDigits.forEach((digit) => {
-      if (
-        Number.isInteger(digit) &&
-        digit >= 0 &&
-        digit <= 9
-      ) {
-        counts[digit]++;
+    latestDigits.forEach(
+      (digit) => {
+        if (
+          Number.isInteger(
+            digit
+          ) &&
+          digit >= 0 &&
+          digit <= 9
+        ) {
+          counts[digit]++;
+        }
       }
-    });
+    );
 
     return counts;
   }, [latestDigits]);
@@ -265,23 +291,24 @@ export default function Home() {
   };
 
   /*
-   * Temporary prediction display.
+   * Temporary prediction.
    */
-  const getPredictionPlaceholder = () => {
-    switch (analysisType) {
-      case "OVER_UNDER":
-        return "OVER / UNDER";
+  const getPredictionPlaceholder =
+    () => {
+      switch (analysisType) {
+        case "OVER_UNDER":
+          return "OVER / UNDER";
 
-      case "EVEN_ODD":
-        return "EVEN / ODD";
+        case "EVEN_ODD":
+          return "EVEN / ODD";
 
-      case "MATCHES_DIFFERS":
-        return `MATCHES / DIFFERS ${targetDigit}`;
+        case "MATCHES_DIFFERS":
+          return `MATCHES / DIFFERS ${targetDigit}`;
 
-      default:
-        return "OVER / UNDER";
-    }
-  };
+        default:
+          return "OVER / UNDER";
+      }
+    };
 
   const analysisName =
     getAnalysisName();
@@ -290,16 +317,18 @@ export default function Home() {
     getPredictionPlaceholder();
 
   /*
-   * Prediction engine will be connected
-   * after live data is confirmed.
+   * Prediction engine will be
+   * added later.
    */
   const confidence = 0;
 
-  const status = "WAIT" as const;
+  const status =
+    "WAIT" as const;
 
   const signals = [
     {
-      market: selectedMarket.name,
+      market:
+        selectedMarket.name,
       prediction,
       confidence,
       status,
@@ -314,16 +343,15 @@ export default function Home() {
       <header className="dashboard-header">
 
         <div>
-          <h1>Deriv Analysis</h1>
+          <h1>
+            Deriv Analysis
+          </h1>
 
           <p>
-            Live market analysis and
-            prediction dashboard
+            Live market analysis
+            and prediction dashboard
           </p>
         </div>
-
-        {/* Connection status only.
-            No logs page/navigation. */}
 
         <div
           className={`connection-status ${
@@ -349,14 +377,17 @@ export default function Home() {
         <div className="section-header">
 
           <div>
+
             <h2>
               Analysis Settings
             </h2>
 
             <p>
-              Choose the market, analysis type
-              and digit tick window
+              Choose the market,
+              analysis type and
+              digit tick window
             </p>
+
           </div>
 
         </div>
@@ -372,8 +403,11 @@ export default function Home() {
 
           <select
             id="market"
-            value={selectedMarket.symbol}
+            value={
+              selectedMarket.symbol
+            }
             onChange={(event) => {
+
               const market =
                 MARKETS.find(
                   (item) =>
@@ -386,16 +420,25 @@ export default function Home() {
                   market
                 );
               }
+
             }}
           >
-            {MARKETS.map((market) => (
-              <option
-                key={market.symbol}
-                value={market.symbol}
-              >
-                {market.name}
-              </option>
-            ))}
+
+            {MARKETS.map(
+              (market) => (
+                <option
+                  key={
+                    market.symbol
+                  }
+                  value={
+                    market.symbol
+                  }
+                >
+                  {market.name}
+                </option>
+              )
+            )}
+
           </select>
 
         </div>
@@ -419,6 +462,7 @@ export default function Home() {
               )
             }
           >
+
             <option value="OVER_UNDER">
               Over / Under
             </option>
@@ -430,6 +474,7 @@ export default function Home() {
             <option value="MATCHES_DIFFERS">
               Matches / Differs
             </option>
+
           </select>
 
         </div>
@@ -454,14 +499,19 @@ export default function Home() {
               )
             }
           >
-            {TICK_WINDOWS.map((ticks) => (
-              <option
-                key={ticks}
-                value={ticks}
-              >
-                {ticks.toLocaleString()} ticks
-              </option>
-            ))}
+
+            {TICK_WINDOWS.map(
+              (ticks) => (
+                <option
+                  key={ticks}
+                  value={ticks}
+                >
+                  {ticks.toLocaleString()}{" "}
+                  ticks
+                </option>
+              )
+            )}
+
           </select>
 
         </div>
@@ -489,8 +539,11 @@ export default function Home() {
                 )
               }
             >
+
               {Array.from(
-                { length: 10 },
+                {
+                  length: 10,
+                },
                 (_, digit) => (
                   <option
                     key={digit}
@@ -500,6 +553,7 @@ export default function Home() {
                   </option>
                 )
               )}
+
             </select>
 
           </div>
@@ -516,14 +570,16 @@ export default function Home() {
         <div className="section-header">
 
           <div>
+
             <h2>
               Market Overview
             </h2>
 
             <p>
-              Current analysis from the
-              selected market
+              Current analysis from
+              the selected market
             </p>
+
           </div>
 
         </div>
@@ -532,10 +588,18 @@ export default function Home() {
         <div className="market-grid">
 
           <MarketCard
-            market={selectedMarket.name}
-            symbol={analysisName}
-            prediction={prediction}
-            confidence={confidence}
+            market={
+              selectedMarket.name
+            }
+            symbol={
+              analysisName
+            }
+            prediction={
+              prediction
+            }
+            confidence={
+              confidence
+            }
             status={status}
           />
 
