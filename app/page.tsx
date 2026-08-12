@@ -20,12 +20,6 @@ type AnalysisType =
   | "EVEN_ODD"
   | "MATCHES_DIFFERS";
 
-type ConnectionStatus =
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "error";
-
 interface MarketOption {
   name: string;
   symbol: string;
@@ -108,13 +102,8 @@ export default function Home() {
     useState<MarketOption>(MARKETS[4]);
 
   const [analysisType, setAnalysisType] =
-    useState<AnalysisType>(
-      "OVER_UNDER"
-    );
+    useState<AnalysisType>("OVER_UNDER");
 
-  /*
-   * 1,000 remains our default.
-   */
   const [tickWindow, setTickWindow] =
     useState(1000);
 
@@ -124,42 +113,36 @@ export default function Home() {
   const [latestDigits, setLatestDigits] =
     useState<number[]>([]);
 
-  const [currentTick, setCurrentTick] =
-    useState<{
-      quote: number;
-      digit: number;
-      epoch: number;
-    } | null>(null);
-
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>(
-      "connecting"
-    );
+  const [isConnected, setIsConnected] =
+    useState(false);
 
   /*
-   * Create the engine with the selected
-   * tick window.
+   * Create the analysis engine with the
+   * currently selected tick window.
    */
   const dataManager = useMemo(() => {
     const engine =
-      new DerivAnalysisEngine(
-        tickWindow
-      );
+      new DerivAnalysisEngine(tickWindow);
 
-    return new DerivDataManager(
-      engine
-    );
+    return new DerivDataManager(engine);
   }, [tickWindow]);
 
   /*
    * Connect to Deriv.
+   *
+   * IMPORTANT:
+   * Connection status now comes from the
+   * WebSocket status listener, NOT from
+   * receiving a digit.
    */
   useEffect(() => {
+    setIsConnected(false);
     setLatestDigits([]);
-    setCurrentTick(null);
 
-    setConnectionStatus(
-      "connecting"
+    console.log(
+      "[Dashboard] Connecting to:",
+      selectedMarket.name,
+      selectedMarket.symbol
     );
 
     dataManager.connect(
@@ -167,56 +150,56 @@ export default function Home() {
     );
 
     /*
-     * Listen for connection status.
+     * Listen for actual WebSocket status.
      */
     const unsubscribeStatus =
-      dataManager.onStatus(
-        (status) => {
-          setConnectionStatus(
-            status
-          );
+      dataManager.onStatus((status) => {
+        console.log(
+          "[Dashboard] Deriv status:",
+          status
+        );
+
+        if (status === "connected") {
+          setIsConnected(true);
         }
-      );
+
+        if (
+          status === "disconnected" ||
+          status === "error"
+        ) {
+          setIsConnected(false);
+        }
+      });
 
     /*
-     * Historical + live digits.
+     * Listen for new live digits.
      */
     const unsubscribeDigit =
-      dataManager.onDigit(
-        (digit) => {
-          setLatestDigits(
-            (previous) => {
-              const updated = [
-                ...previous,
-                digit,
-              ];
+      dataManager.onDigit((digit) => {
+        console.log(
+          "[Dashboard] New digit:",
+          digit
+        );
 
-              return updated.slice(
-                -tickWindow
-              );
-            }
+        setLatestDigits((previous) => {
+          const updated = [
+            ...previous,
+            digit,
+          ];
+
+          return updated.slice(
+            -tickWindow
           );
-        }
-      );
+        });
+      });
 
     /*
-     * Current live tick.
+     * Cleanup when market/window changes
+     * or the page is closed.
      */
-    const unsubscribeTick =
-      dataManager.onTick(
-        (tick) => {
-          setCurrentTick({
-            quote: tick.quote,
-            digit: tick.digit,
-            epoch: tick.epoch,
-          });
-        }
-      );
-
     return () => {
       unsubscribeStatus();
       unsubscribeDigit();
-      unsubscribeTick();
 
       dataManager.disconnect();
     };
@@ -227,29 +210,27 @@ export default function Home() {
   ]);
 
   /*
-   * Digit distribution.
+   * Calculate digit distribution.
    */
   const digitCounts = useMemo(() => {
-    const counts =
-      Array(10).fill(0);
+    const counts = Array(10).fill(0);
 
-    latestDigits.forEach(
-      (digit) => {
-        if (
-          Number.isInteger(
-            digit
-          ) &&
-          digit >= 0 &&
-          digit <= 9
-        ) {
-          counts[digit]++;
-        }
+    latestDigits.forEach((digit) => {
+      if (
+        Number.isInteger(digit) &&
+        digit >= 0 &&
+        digit <= 9
+      ) {
+        counts[digit]++;
       }
-    );
+    });
 
     return counts;
   }, [latestDigits]);
 
+  /*
+   * Analysis name.
+   */
   const getAnalysisName = () => {
     switch (analysisType) {
       case "OVER_UNDER":
@@ -266,22 +247,28 @@ export default function Home() {
     }
   };
 
-  const getPredictionPlaceholder =
-    () => {
-      switch (analysisType) {
-        case "OVER_UNDER":
-          return "OVER / UNDER";
+  /*
+   * Temporary prediction display.
+   *
+   * The real prediction engine will be
+   * connected after the live data stream
+   * is confirmed.
+   */
+  const getPredictionPlaceholder = () => {
+    switch (analysisType) {
+      case "OVER_UNDER":
+        return "OVER / UNDER";
 
-        case "EVEN_ODD":
-          return "EVEN / ODD";
+      case "EVEN_ODD":
+        return "EVEN / ODD";
 
-        case "MATCHES_DIFFERS":
-          return `MATCHES / DIFFERS ${targetDigit}`;
+      case "MATCHES_DIFFERS":
+        return `MATCHES / DIFFERS ${targetDigit}`;
 
-        default:
-          return "OVER / UNDER";
-      }
-    };
+      default:
+        return "OVER / UNDER";
+    }
+  };
 
   const analysisName =
     getAnalysisName();
@@ -289,38 +276,18 @@ export default function Home() {
   const prediction =
     getPredictionPlaceholder();
 
-  /*
-   * Prediction mathematics will be
-   * connected later.
-   */
   const confidence = 0;
 
   const status = "WAIT" as const;
 
   const signals = [
     {
-      market:
-        selectedMarket.name,
+      market: selectedMarket.name,
       prediction,
       confidence,
       status,
     },
   ];
-
-  /*
-   * Connection display.
-   */
-  const connectionText =
-    connectionStatus ===
-    "connected"
-      ? "Live"
-      : connectionStatus ===
-        "error"
-      ? "Connection Error"
-      : connectionStatus ===
-        "disconnected"
-      ? "Disconnected"
-      : "Connecting...";
 
   return (
     <main className="dashboard">
@@ -329,9 +296,7 @@ export default function Home() {
 
       <header className="dashboard-header">
         <div>
-          <h1>
-            Deriv Analysis
-          </h1>
+          <h1>Deriv Analysis</h1>
 
           <p>
             Live market analysis and
@@ -341,53 +306,18 @@ export default function Home() {
 
         <div
           className={`connection-status ${
-            connectionStatus
+            isConnected
+              ? "connected"
+              : "connecting"
           }`}
         >
           <span className="connection-dot" />
 
-          {connectionText}
+          {isConnected
+            ? "Connected"
+            : "Connecting..."}
         </div>
       </header>
-
-
-      {/* CURRENT TICK */}
-
-      <section className="current-tick-panel">
-        <div>
-          <span>
-            CURRENT TICK
-          </span>
-
-          <strong>
-            {currentTick
-              ? currentTick.digit
-              : "—"}
-          </strong>
-        </div>
-
-        <div>
-          <span>
-            MARKET
-          </span>
-
-          <strong>
-            {selectedMarket.name}
-          </strong>
-        </div>
-
-        <div>
-          <span>
-            ANALYSIS TICKS
-          </span>
-
-          <strong>
-            {latestDigits.length.toLocaleString()}
-            {" / "}
-            {tickWindow.toLocaleString()}
-          </strong>
-        </div>
-      </section>
 
 
       {/* ANALYSIS CONTROLS */}
@@ -396,13 +326,11 @@ export default function Home() {
 
         <div className="section-header">
           <div>
-            <h2>
-              Analysis Settings
-            </h2>
+            <h2>Analysis Settings</h2>
 
             <p>
-              Choose the market, analysis
-              type and digit tick window
+              Choose the market, analysis type
+              and digit tick window
             </p>
           </div>
         </div>
@@ -417,9 +345,7 @@ export default function Home() {
 
           <select
             id="market"
-            value={
-              selectedMarket.symbol
-            }
+            value={selectedMarket.symbol}
             onChange={(event) => {
               const market =
                 MARKETS.find(
@@ -435,20 +361,14 @@ export default function Home() {
               }
             }}
           >
-            {MARKETS.map(
-              (market) => (
-                <option
-                  key={
-                    market.symbol
-                  }
-                  value={
-                    market.symbol
-                  }
-                >
-                  {market.name}
-                </option>
-              )
-            )}
+            {MARKETS.map((market) => (
+              <option
+                key={market.symbol}
+                value={market.symbol}
+              >
+                {market.name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -503,17 +423,14 @@ export default function Home() {
               )
             }
           >
-            {TICK_WINDOWS.map(
-              (ticks) => (
-                <option
-                  key={ticks}
-                  value={ticks}
-                >
-                  {ticks.toLocaleString()}{" "}
-                  ticks
-                </option>
-              )
-            )}
+            {TICK_WINDOWS.map((ticks) => (
+              <option
+                key={ticks}
+                value={ticks}
+              >
+                {ticks.toLocaleString()} ticks
+              </option>
+            ))}
           </select>
         </div>
 
@@ -577,16 +494,10 @@ export default function Home() {
         <div className="market-grid">
 
           <MarketCard
-            market={
-              selectedMarket.name
-            }
+            market={selectedMarket.name}
             symbol={analysisName}
-            prediction={
-              prediction
-            }
-            confidence={
-              confidence
-            }
+            prediction={prediction}
+            confidence={confidence}
             status={status}
           />
 
