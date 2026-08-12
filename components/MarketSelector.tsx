@@ -6,58 +6,103 @@ export type MarketCategory =
   | "JUMP";
 
 export type MarketType =
-  | "OVER_2"
-  | "UNDER_7"
-  | "EVEN"
-  | "ODD"
-  | "MATCHES"
-  | "DIFFERS";
+  | "OVER_UNDER"
+  | "EVEN_ODD"
+  | "MATCHES_DIFFERS";
 
 interface MarketSelectorProps {
   category: MarketCategory;
   symbol: string;
   marketType: MarketType;
   selectedDigit: number;
-  onCategoryChange: (category: MarketCategory) => void;
-  onSymbolChange: (symbol: string) => void;
-  onMarketTypeChange: (market: MarketType) => void;
-  onSelectedDigitChange: (digit: number) => void;
+
+  onCategoryChange: (
+    category: MarketCategory
+  ) => void;
+
+  onSymbolChange: (
+    symbol: string
+  ) => void;
+
+  onMarketTypeChange: (
+    marketType: MarketType
+  ) => void;
+
+  onSelectedDigitChange: (
+    digit: number
+  ) => void;
 }
 
 const marketCategories = {
   VOLATILITY: [
-    { name: "Volatility 10", symbol: "R_10" },
-    { name: "Volatility 25", symbol: "R_25" },
-    { name: "Volatility 50", symbol: "R_50" },
-    { name: "Volatility 75", symbol: "R_75" },
-    { name: "Volatility 100", symbol: "R_100" },
+    {
+      name: "Volatility 10",
+      symbol: "R_10",
+    },
+    {
+      name: "Volatility 25",
+      symbol: "R_25",
+    },
+    {
+      name: "Volatility 50",
+      symbol: "R_50",
+    },
+    {
+      name: "Volatility 75",
+      symbol: "R_75",
+    },
+    {
+      name: "Volatility 100",
+      symbol: "R_100",
+    },
   ],
 
   VOLATILITY_1S: [
-    { name: "Volatility 10 (1s)", symbol: "1HZ10V" },
-    { name: "Volatility 25 (1s)", symbol: "1HZ25V" },
-    { name: "Volatility 50 (1s)", symbol: "1HZ50V" },
-    { name: "Volatility 75 (1s)", symbol: "1HZ75V" },
-    { name: "Volatility 100 (1s)", symbol: "1HZ100V" },
+    {
+      name: "Volatility 10 (1s)",
+      symbol: "1HZ10V",
+    },
+    {
+      name: "Volatility 25 (1s)",
+      symbol: "1HZ25V",
+    },
+    {
+      name: "Volatility 50 (1s)",
+      symbol: "1HZ50V",
+    },
+    {
+      name: "Volatility 75 (1s)",
+      symbol: "1HZ75V",
+    },
+    {
+      name: "Volatility 100 (1s)",
+      symbol: "1HZ100V",
+    },
   ],
 
   JUMP: [
-    { name: "Jump 10", symbol: "JD10" },
-    { name: "Jump 25", symbol: "JD25" },
-    { name: "Jump 50", symbol: "JD50" },
-    { name: "Jump 75", symbol: "JD75" },
-    { name: "Jump 100", symbol: "JD100" },
+    {
+      name: "Jump 10",
+      symbol: "JD10",
+    },
+    {
+      name: "Jump 25",
+      symbol: "JD25",
+    },
+    {
+      name: "Jump 50",
+      symbol: "JD50",
+    },
+    {
+      name: "Jump 75",
+      symbol: "JD75",
+    },
+    {
+      name: "Jump 100",
+      symbol: "JD100",
+    },
   ],
 };
-
-const marketTypes = [
-  { value: "OVER_2", label: "Over 2" },
-  { value: "UNDER_7", label: "Under 7" },
-  { value: "EVEN", label: "Even" },
-  { value: "ODD", label: "Odd" },
-  { value: "MATCHES", label: "Matches" },
-  { value: "DIFFERS", label: "Differs" },
-];
 
 export default function MarketSelector({
   category,
@@ -69,18 +114,56 @@ export default function MarketSelector({
   onMarketTypeChange,
   onSelectedDigitChange,
 }: MarketSelectorProps) {
-  const symbols = marketCategories[category];
+  const symbols =
+    marketCategories[category];
+
+  /*
+   * When the category changes, make sure
+   * the selected market belongs to the
+   * newly selected category.
+   */
+  const handleCategoryChange = (
+    nextCategory: MarketCategory
+  ) => {
+    onCategoryChange(
+      nextCategory
+    );
+
+    const nextMarkets =
+      marketCategories[
+        nextCategory
+      ];
+
+    if (
+      nextMarkets.length > 0 &&
+      !nextMarkets.some(
+        (market) =>
+          market.symbol === symbol
+      )
+    ) {
+      onSymbolChange(
+        nextMarkets[0].symbol
+      );
+    }
+  };
 
   return (
     <section className="market-selector">
+
+      {/* MARKET CATEGORY */}
+
       <div className="selector-group">
-        <label>Market Category</label>
+        <label htmlFor="market-category">
+          Market Category
+        </label>
 
         <select
+          id="market-category"
           value={category}
           onChange={(event) =>
-            onCategoryChange(
-              event.target.value as MarketCategory
+            handleCategoryChange(
+              event.target
+                .value as MarketCategory
             )
           }
         >
@@ -98,69 +181,104 @@ export default function MarketSelector({
         </select>
       </div>
 
+
+      {/* MARKET */}
+
       <div className="selector-group">
-        <label>Select Market</label>
+        <label htmlFor="market-symbol">
+          Select Market
+        </label>
 
         <select
+          id="market-symbol"
           value={symbol}
           onChange={(event) =>
-            onSymbolChange(event.target.value)
-          }
-        >
-          {symbols.map((item) => (
-            <option
-              key={item.symbol}
-              value={item.symbol}
-            >
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="selector-group">
-        <label>Analysis Type</label>
-
-        <select
-          value={marketType}
-          onChange={(event) =>
-            onMarketTypeChange(
-              event.target.value as MarketType
+            onSymbolChange(
+              event.target.value
             )
           }
         >
-          {marketTypes.map((type) => (
-            <option
-              key={type.value}
-              value={type.value}
-            >
-              {type.label}
-            </option>
-          ))}
+          {symbols.map(
+            (market) => (
+              <option
+                key={market.symbol}
+                value={market.symbol}
+              >
+                {market.name}
+              </option>
+            )
+          )}
         </select>
       </div>
 
-      {(marketType === "MATCHES" ||
-        marketType === "DIFFERS") && (
+
+      {/* ANALYSIS TYPE */}
+
+      <div className="selector-group">
+        <label htmlFor="market-type">
+          Analysis Type
+        </label>
+
+        <select
+          id="market-type"
+          value={marketType}
+          onChange={(event) =>
+            onMarketTypeChange(
+              event.target
+                .value as MarketType
+            )
+          }
+        >
+          <option value="OVER_UNDER">
+            Over / Under
+          </option>
+
+          <option value="EVEN_ODD">
+            Even / Odd
+          </option>
+
+          <option value="MATCHES_DIFFERS">
+            Matches / Differs
+          </option>
+        </select>
+      </div>
+
+
+      {/* TARGET DIGIT */}
+
+      {marketType ===
+        "MATCHES_DIFFERS" && (
         <div className="selector-group">
-          <label>Select Digit</label>
+          <label htmlFor="selected-digit">
+            Target Digit
+          </label>
 
           <select
+            id="selected-digit"
             value={selectedDigit}
             onChange={(event) =>
               onSelectedDigitChange(
-                Number(event.target.value)
+                Number(
+                  event.target.value
+                )
               )
             }
           >
-            {Array.from({ length: 10 }, (_, digit) => (
-              <option key={digit} value={digit}>
-                Digit {digit}
-              </option>
-            ))}
+            {Array.from(
+              { length: 10 },
+              (_, digit) => (
+                <option
+                  key={digit}
+                  value={digit}
+                >
+                  Digit {digit}
+                </option>
+              )
+            )}
           </select>
         </div>
       )}
+
     </section>
   );
-              }
+}
