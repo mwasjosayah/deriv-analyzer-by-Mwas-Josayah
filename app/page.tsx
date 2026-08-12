@@ -19,11 +19,15 @@ import SignalHistory from "../components/SignalHistory";
 import { DerivDataManager } from "../lib/deriv-data";
 import { DerivAnalysisEngine } from "../lib/deriv-engine";
 
-const DEFAULT_MARKET = {
-  category: "VOLATILITY" as MarketCategory,
-  symbol: "R_100",
-  name: "Volatility 100 Index",
-};
+const DEFAULT_CATEGORY: MarketCategory =
+  "VOLATILITY";
+
+const DEFAULT_SYMBOL = "R_100";
+
+const DEFAULT_MARKET_TYPE: MarketType =
+  "OVER_2";
+
+const DEFAULT_SELECTED_DIGIT = 7;
 
 const TICK_WINDOWS = [
   100,
@@ -35,79 +39,43 @@ const TICK_WINDOWS = [
 ];
 
 export default function Home() {
-  /*
-   * ================================
-   * MARKET SETTINGS
-   * ================================
-   */
+  const [category, setCategory] =
+    useState<MarketCategory>(
+      DEFAULT_CATEGORY
+    );
 
-  const [
-    marketCategory,
-    setMarketCategory,
-  ] = useState<MarketCategory>(
-    DEFAULT_MARKET.category
-  );
+  const [selectedSymbol, setSelectedSymbol] =
+    useState(DEFAULT_SYMBOL);
 
-  const [
-    selectedSymbol,
-    setSelectedSymbol,
-  ] = useState(
-    DEFAULT_MARKET.symbol
-  );
+  const [marketType, setMarketType] =
+    useState<MarketType>(
+      DEFAULT_MARKET_TYPE
+    );
 
-  /*
-   * ================================
-   * ANALYSIS SETTINGS
-   * ================================
-   */
+  const [selectedDigit, setSelectedDigit] =
+    useState(DEFAULT_SELECTED_DIGIT);
 
-  const [
-    marketType,
-    setMarketType,
-  ] = useState<MarketType>(
-    "OVER_UNDER"
-  );
+  const [tickWindow, setTickWindow] =
+    useState(1000);
 
-  const [
-    selectedDigit,
-    setSelectedDigit,
-  ] = useState(7);
+  const [latestDigits, setLatestDigits] =
+    useState<number[]>([]);
 
-  const [
-    tickWindow,
-    setTickWindow,
-  ] = useState(1000);
+  const [isConnected, setIsConnected] =
+    useState(false);
+
+  const [connectionStatus, setConnectionStatus] =
+    useState<
+      "connecting" |
+      "connected" |
+      "disconnected" |
+      "error"
+    >("disconnected");
 
   /*
-   * ================================
-   * LIVE DATA
-   * ================================
-   */
-
-  const [
-    latestDigits,
-    setLatestDigits,
-  ] = useState<number[]>([]);
-
-  const [
-    isConnected,
-    setIsConnected,
-  ] = useState(false);
-
-  const [
-    connectionError,
-    setConnectionError,
-  ] = useState(false);
-
-  /*
-   * ================================
-   * DATA MANAGER
-   * ================================
-   *
-   * A new engine is created whenever
+   * Create a new analysis engine whenever
    * the selected tick window changes.
    */
-
   const dataManager = useMemo(() => {
     const engine =
       new DerivAnalysisEngine(
@@ -121,20 +89,19 @@ export default function Home() {
   }, [tickWindow]);
 
   /*
-   * ================================
-   * MARKET CONNECTION
-   * ================================
+   * Connect to the currently selected
+   * Deriv market.
    */
-
   useEffect(() => {
-    setIsConnected(false);
-    setConnectionError(false);
     setLatestDigits([]);
+    setIsConnected(false);
+    setConnectionStatus(
+      "connecting"
+    );
 
     /*
-     * STATUS LISTENER
+     * Listen for WebSocket status.
      */
-
     const unsubscribeStatus =
       dataManager.onStatus(
         (status) => {
@@ -143,33 +110,19 @@ export default function Home() {
             status
           );
 
-          if (
+          setConnectionStatus(
+            status
+          );
+
+          setIsConnected(
             status === "connected"
-          ) {
-            setIsConnected(true);
-            setConnectionError(false);
-          }
-
-          if (
-            status === "error"
-          ) {
-            setIsConnected(false);
-            setConnectionError(true);
-          }
-
-          if (
-            status ===
-            "disconnected"
-          ) {
-            setIsConnected(false);
-          }
+          );
         }
       );
 
     /*
-     * DIGIT LISTENER
+     * Listen for incoming digits.
      */
-
     const unsubscribeDigit =
       dataManager.onDigit(
         (digit) => {
@@ -193,23 +146,28 @@ export default function Home() {
         }
       );
 
-    /*
-     * CONNECT
-     */
-
     console.log(
-      "[Dashboard] Connecting to market:",
-      selectedSymbol
+      "[Dashboard] Connecting:",
+      {
+        category,
+        symbol: selectedSymbol,
+        marketType,
+        selectedDigit,
+        tickWindow,
+      }
     );
 
+    /*
+     * Start the Deriv connection.
+     */
     dataManager.connect(
       selectedSymbol
     );
 
     /*
-     * CLEANUP
+     * Cleanup when market/window changes
+     * or component unmounts.
      */
-
     return () => {
       unsubscribeStatus();
       unsubscribeDigit();
@@ -219,15 +177,58 @@ export default function Home() {
   }, [
     dataManager,
     selectedSymbol,
+    category,
+    marketType,
+    selectedDigit,
     tickWindow,
   ]);
 
   /*
-   * ================================
-   * DIGIT STATISTICS
-   * ================================
+   * Change market category.
+   *
+   * When the category changes, choose the
+   * first market belonging to that category.
    */
+  const handleCategoryChange = (
+    newCategory: MarketCategory
+  ) => {
+    setCategory(
+      newCategory
+    );
 
+    if (
+      newCategory ===
+      "VOLATILITY"
+    ) {
+      setSelectedSymbol(
+        "R_10"
+      );
+      return;
+    }
+
+    if (
+      newCategory ===
+      "VOLATILITY_1S"
+    ) {
+      setSelectedSymbol(
+        "1HZ10V"
+      );
+      return;
+    }
+
+    if (
+      newCategory ===
+      "JUMP"
+    ) {
+      setSelectedSymbol(
+        "JD10"
+      );
+    }
+  };
+
+  /*
+   * Calculate digit distribution.
+   */
   const digitCounts = useMemo(() => {
     const counts =
       Array(10).fill(
@@ -237,7 +238,9 @@ export default function Home() {
     latestDigits.forEach(
       (digit) => {
         if (
-          Number.isInteger(digit) &&
+          Number.isInteger(
+            digit
+          ) &&
           digit >= 0 &&
           digit <= 9
         ) {
@@ -247,118 +250,37 @@ export default function Home() {
     );
 
     return counts;
-  }, [latestDigits]);
+  }, [
+    latestDigits,
+  ]);
 
   /*
-   * ================================
-   * MARKET NAME
-   * ================================
+   * Display name for the selected
+   * analysis type.
    */
-
-  const marketName =
-    useMemo(() => {
-      const marketNames: Record<
-        string,
-        string
-      > = {
-        R_10:
-          "Volatility 10 Index",
-
-        R_25:
-          "Volatility 25 Index",
-
-        R_50:
-          "Volatility 50 Index",
-
-        R_75:
-          "Volatility 75 Index",
-
-        R_100:
-          "Volatility 100 Index",
-
-        "1HZ10V":
-          "Volatility 10 (1s) Index",
-
-        "1HZ25V":
-          "Volatility 25 (1s) Index",
-
-        "1HZ50V":
-          "Volatility 50 (1s) Index",
-
-        "1HZ75V":
-          "Volatility 75 (1s) Index",
-
-        "1HZ100V":
-          "Volatility 100 (1s) Index",
-
-        JD10:
-          "Jump 10 Index",
-
-        JD25:
-          "Jump 25 Index",
-
-        JD50:
-          "Jump 50 Index",
-
-        JD75:
-          "Jump 75 Index",
-
-        JD100:
-          "Jump 100 Index",
-      };
-
-      return (
-        marketNames[selectedSymbol] ??
-        selectedSymbol
-      );
-    }, [selectedSymbol]);
-
-  /*
-   * ================================
-   * ANALYSIS NAME
-   * ================================
-   */
-
   const analysisName =
     useMemo(() => {
       switch (marketType) {
-        case "OVER_UNDER":
-          return "OVER / UNDER";
+        case "OVER_2":
+          return "OVER 2";
 
-        case "EVEN_ODD":
+        case "UNDER_7":
+          return "UNDER 7";
+
+        case "EVEN":
           return "EVEN / ODD";
 
-        case "MATCHES_DIFFERS":
-          return "MATCHES / DIFFERS";
+        case "ODD":
+          return "EVEN / ODD";
+
+        case "MATCHES":
+          return `MATCHES ${selectedDigit}`;
+
+        case "DIFFERS":
+          return `DIFFERS ${selectedDigit}`;
 
         default:
-          return "OVER / UNDER";
-      }
-    }, [marketType]);
-
-  /*
-   * ================================
-   * TEMPORARY PREDICTION
-   * ================================
-   *
-   * This will later be replaced by
-   * the real analysis engine.
-   */
-
-  const prediction =
-    useMemo(() => {
-      switch (marketType) {
-        case "OVER_UNDER":
-          return "WAITING FOR ANALYSIS";
-
-        case "EVEN_ODD":
-          return "WAITING FOR ANALYSIS";
-
-        case "MATCHES_DIFFERS":
-          return `DIGIT ${selectedDigit}`;
-
-        default:
-          return "WAITING FOR ANALYSIS";
+          return "WAIT";
       }
     }, [
       marketType,
@@ -366,19 +288,27 @@ export default function Home() {
     ]);
 
   /*
-   * ================================
-   * TEMPORARY SIGNAL
-   * ================================
+   * Prediction logic will be implemented
+   * in the analysis layer later.
+   *
+   * For now we deliberately do NOT generate
+   * fake predictions.
    */
+  const prediction =
+    "WAIT";
 
   const confidence = 0;
 
   const status =
     "WAIT" as const;
 
+  /*
+   * Temporary signal data for the UI.
+   */
   const signals = [
     {
-      market: marketName,
+      market:
+        selectedSymbol,
       prediction,
       confidence,
       status,
@@ -386,17 +316,34 @@ export default function Home() {
   ];
 
   /*
-   * ================================
-   * RENDER
-   * ================================
+   * Human-readable connection text.
    */
+  const connectionText =
+    useMemo(() => {
+      switch (
+        connectionStatus
+      ) {
+        case "connected":
+          return "Connected";
+
+        case "connecting":
+          return "Connecting...";
+
+        case "error":
+          return "Connection Error";
+
+        case "disconnected":
+        default:
+          return "Disconnected";
+      }
+    }, [
+      connectionStatus,
+    ]);
 
   return (
     <main className="dashboard">
 
-      {/* ============================
-          HEADER
-          ============================ */}
+      {/* HEADER */}
 
       <header className="dashboard-header">
 
@@ -412,29 +359,17 @@ export default function Home() {
         </div>
 
         <div
-          className={`connection-status ${
-            isConnected
-              ? "connected"
-              : connectionError
-              ? "error"
-              : "connecting"
-          }`}
+          className={`connection-status ${connectionStatus}`}
         >
           <span className="connection-dot" />
 
-          {isConnected
-            ? "Connected"
-            : connectionError
-            ? "Connection Error"
-            : "Connecting..."}
+          {connectionText}
         </div>
 
       </header>
 
 
-      {/* ============================
-          MARKET SELECTOR
-          ============================ */}
+      {/* MARKET SELECTOR */}
 
       <section className="analysis-controls">
 
@@ -446,9 +381,8 @@ export default function Home() {
             </h2>
 
             <p>
-              Select the market,
-              analysis type and
-              tick analysis window.
+              Select the market and
+              analysis type
             </p>
           </div>
 
@@ -456,7 +390,7 @@ export default function Home() {
 
         <MarketSelector
           category={
-            marketCategory
+            category
           }
           symbol={
             selectedSymbol
@@ -468,7 +402,7 @@ export default function Home() {
             selectedDigit
           }
           onCategoryChange={
-            setMarketCategory
+            handleCategoryChange
           }
           onSymbolChange={
             setSelectedSymbol
@@ -481,8 +415,6 @@ export default function Home() {
           }
         />
 
-        {/* TICK WINDOW */}
-
         <div className="control-group">
 
           <label htmlFor="tick-window">
@@ -491,7 +423,9 @@ export default function Home() {
 
           <select
             id="tick-window"
-            value={tickWindow}
+            value={
+              tickWindow
+            }
             onChange={(event) =>
               setTickWindow(
                 Number(
@@ -500,6 +434,7 @@ export default function Home() {
               )
             }
           >
+
             {TICK_WINDOWS.map(
               (ticks) => (
                 <option
@@ -511,6 +446,7 @@ export default function Home() {
                 </option>
               )
             )}
+
           </select>
 
         </div>
@@ -518,9 +454,7 @@ export default function Home() {
       </section>
 
 
-      {/* ============================
-          MARKET OVERVIEW
-          ============================ */}
+      {/* CONNECTION INFORMATION */}
 
       <section className="market-overview">
 
@@ -532,8 +466,8 @@ export default function Home() {
             </h2>
 
             <p>
-              Current analysis from
-              the selected market
+              Current data from the
+              selected Deriv market
             </p>
           </div>
 
@@ -543,7 +477,7 @@ export default function Home() {
 
           <MarketCard
             market={
-              marketName
+              selectedSymbol
             }
             symbol={
               analysisName
@@ -564,45 +498,41 @@ export default function Home() {
       </section>
 
 
-      {/* ============================
-          TOP SIGNALS
-          ============================ */}
+      {/* TOP SIGNALS */}
 
       <TopSignals
-        signals={signals}
+        signals={
+          signals
+        }
       />
 
 
-      {/* ============================
-          DIGIT STATISTICS
-          ============================ */}
+      {/* DIGIT STATISTICS */}
 
       <DigitStats
-        digits={digitCounts}
+        digits={
+          digitCounts
+        }
       />
 
 
-      {/* ============================
-          RECENT TICKS
-          ============================ */}
+      {/* RECENT TICKS */}
 
       <RecentTicks
-        digits={latestDigits}
+        digits={
+          latestDigits
+        }
       />
 
 
-      {/* ============================
-          SIGNAL HISTORY
-          ============================ */}
+      {/* SIGNAL HISTORY */}
 
       <SignalHistory
         signals={[]}
       />
 
 
-      {/* ============================
-          FOOTER
-          ============================ */}
+      {/* FOOTER */}
 
       <footer className="dashboard-footer">
 
