@@ -7,13 +7,9 @@ export interface DerivTick {
   symbol: string;
 }
 
-type DigitListener = (
-  digit: number
-) => void;
+type DigitListener = (digit: number) => void;
 
-type TickListener = (
-  tick: DerivTick
-) => void;
+type TickListener = (tick: DerivTick) => void;
 
 type StatusListener = (
   status:
@@ -29,7 +25,9 @@ export class DerivDataManager {
   private engine: DerivAnalysisEngine;
 
   private digitListeners: DigitListener[] = [];
+
   private tickListeners: TickListener[] = [];
+
   private statusListeners: StatusListener[] = [];
 
   private currentTick: DerivTick | null = null;
@@ -38,9 +36,7 @@ export class DerivDataManager {
 
   private manuallyDisconnected = false;
 
-  constructor(
-    engine?: DerivAnalysisEngine
-  ) {
+  constructor(engine?: DerivAnalysisEngine) {
     this.engine =
       engine ??
       new DerivAnalysisEngine(1000);
@@ -57,22 +53,16 @@ export class DerivDataManager {
     this.disconnect();
 
     this.currentSymbol = symbol;
+
     this.manuallyDisconnected = false;
 
-    /*
-     * Tell the dashboard that we are
-     * attempting to connect.
-     */
     this.setStatus("connecting");
 
     console.log(
-      "[Deriv] Connecting to:",
+      "[Deriv] Starting WebSocket connection:",
       symbol
     );
 
-    /*
-     * Deriv WebSocket endpoint.
-     */
     const socket = new WebSocket(
       "wss://ws.binaryws.com/websockets/v3"
     );
@@ -80,40 +70,44 @@ export class DerivDataManager {
     this.socket = socket;
 
     /*
-     * CONNECTION OPENED
+     * SOCKET OPEN
      */
     socket.onopen = () => {
-      /*
-       * Ignore this socket if another socket
-       * has already replaced it.
-       */
-      if (this.socket !== socket) {
-        return;
-      }
-
       console.log(
-        "[Deriv] WebSocket connected"
+        "[Deriv] WebSocket OPEN"
       );
 
+      /*
+       * IMPORTANT:
+       * Notify the dashboard immediately.
+       */
       this.setStatus("connected");
 
       /*
-       * STEP 1
-       *
-       * Ask Deriv for server time.
-       * This confirms the API is responding.
+       * 1. Connection test.
        */
       socket.send(
         JSON.stringify({
-          time: 1,
+          ping: 1,
           req_id: 1,
         })
       );
 
       /*
-       * STEP 2
+       * 2. Request active symbols.
        *
-       * Load historical ticks.
+       * This allows us to confirm that
+       * the selected market exists.
+       */
+      socket.send(
+        JSON.stringify({
+          active_symbols: "brief",
+          req_id: 2,
+        })
+      );
+
+      /*
+       * 3. Request historical ticks.
        */
       socket.send(
         JSON.stringify({
@@ -122,59 +116,79 @@ export class DerivDataManager {
           end: "latest",
           style: "ticks",
           subscribe: 0,
-          req_id: 2,
+          req_id: 3,
         })
       );
 
       /*
-       * STEP 3
-       *
-       * Subscribe to live ticks.
+       * 4. Subscribe to live ticks.
        */
       socket.send(
         JSON.stringify({
           ticks: symbol,
           subscribe: 1,
-          req_id: 3,
+          req_id: 4,
         })
       );
 
       console.log(
-        "[Deriv] Tick requests sent for:",
+        "[Deriv] Market requests sent:",
         symbol
       );
     };
 
     /*
-     * MESSAGES FROM DERIV
+     * SOCKET MESSAGE
      */
     socket.onmessage = (event) => {
-      /*
-       * Ignore messages from an old socket.
-       */
-      if (this.socket !== socket) {
-        return;
-      }
-
       try {
-        const data =
-          JSON.parse(event.data);
-
-        console.log(
-          "[Deriv message]",
-          data
+        const data = JSON.parse(
+          event.data
         );
 
         /*
-         * SERVER TIME
+         * PING RESPONSE
          */
         if (
-          data.msg_type === "time"
+          data.msg_type === "ping"
         ) {
           console.log(
-            "[Deriv] Server time:",
-            data.time
+            "[Deriv] Ping successful"
           );
+
+          return;
+        }
+
+        /*
+         * ACTIVE SYMBOLS
+         */
+        if (
+          data.msg_type ===
+            "active_symbols" &&
+          Array.isArray(
+            data.active_symbols
+          )
+        ) {
+          const foundMarket =
+            data.active_symbols.find(
+              (market: any) =>
+                market.underlying_symbol ===
+                  this.currentSymbol ||
+                market.symbol ===
+                  this.currentSymbol
+            );
+
+          if (foundMarket) {
+            console.log(
+              "[Deriv] Market confirmed:",
+              this.currentSymbol
+            );
+          } else {
+            console.warn(
+              "[Deriv] Selected market was not found in active symbols:",
+              this.currentSymbol
+            );
+          }
 
           return;
         }
@@ -200,35 +214,32 @@ export class DerivDataManager {
                   prices
                 );
 
-          const digits =
-            prices
-              .map((price) =>
-                this.extractDigit(
-                  price,
-                  pipSize
-                )
+          const digits = prices
+            .map((price) =>
+              this.extractDigit(
+                price,
+                pipSize
               )
-              .filter(
-                (
+            )
+            .filter(
+              (
+                digit
+              ): digit is number =>
+                Number.isInteger(
                   digit
-                ): digit is number =>
-                  Number.isInteger(
-                    digit
-                  ) &&
-                  digit >= 0 &&
-                  digit <= 9
-              );
+                ) &&
+                digit >= 0 &&
+                digit <= 9
+            );
 
           /*
-           * Clear previous analysis.
+           * Start the analysis engine
+           * with historical data.
            */
           this.engine.clear();
 
-          /*
-           * Add historical digits.
-           */
           this.engine.addTicks(
-            digits.slice(-1000)
+            digits
           );
 
           console.log(
@@ -237,25 +248,19 @@ export class DerivDataManager {
           );
 
           console.log(
-            "[Deriv] Analysis tick count:",
+            "[Deriv] Engine tick count:",
             this.engine.getTickCount()
           );
 
           /*
-           * IMPORTANT:
-           *
-           * Historical ticks also need to appear
-           * on the dashboard.
-           *
-           * Send them through the digit listeners.
+           * Send historical digits to
+           * the dashboard as well.
            */
-          digits
-            .slice(-1000)
-            .forEach((digit) => {
-              this.notifyDigitListeners(
-                digit
-              );
-            });
+          digits.forEach((digit) => {
+            this.notifyDigitListeners(
+              digit
+            );
+          });
 
           return;
         }
@@ -287,6 +292,13 @@ export class DerivDataManager {
               : this.currentSymbol ??
                 "";
 
+          /*
+           * Deriv may provide pip_size
+           * on the tick.
+           *
+           * If not, determine decimal
+           * places from the quote.
+           */
           const pipSize =
             typeof data.tick.pip_size ===
             "number"
@@ -310,9 +322,7 @@ export class DerivDataManager {
               "[Deriv] Invalid digit:",
               digit,
               "quote:",
-              quote,
-              "pip:",
-              pipSize
+              quote
             );
 
             return;
@@ -325,30 +335,28 @@ export class DerivDataManager {
             symbol: tickSymbol,
           };
 
-          this.currentTick = tick;
+          this.currentTick =
+            tick;
 
           /*
-           * Add live digit to analysis engine.
+           * Add to analysis engine.
            */
           this.engine.addTick(
             digit
           );
 
           console.log(
-            "[Deriv LIVE TICK]",
+            "[Deriv] LIVE TICK:",
             tick
           );
 
           /*
-           * Notify tick listeners.
+           * Notify dashboard.
            */
           this.notifyTickListeners(
             tick
           );
 
-          /*
-           * Notify digit listeners.
-           */
           this.notifyDigitListeners(
             digit
           );
@@ -357,7 +365,7 @@ export class DerivDataManager {
         }
 
         /*
-         * DERIV API ERROR
+         * DERIV ERROR
          */
         if (data.error) {
           console.error(
@@ -374,17 +382,15 @@ export class DerivDataManager {
           "[Deriv] Message processing error:",
           error
         );
+
+        this.setStatus("error");
       }
     };
 
     /*
-     * WEBSOCKET ERROR
+     * SOCKET ERROR
      */
     socket.onerror = (error) => {
-      if (this.socket !== socket) {
-        return;
-      }
-
       console.error(
         "[Deriv WebSocket ERROR]",
         error
@@ -394,19 +400,16 @@ export class DerivDataManager {
     };
 
     /*
-     * WEBSOCKET CLOSED
+     * SOCKET CLOSED
      */
     socket.onclose = (event) => {
-      if (this.socket !== socket) {
-        return;
-      }
-
       console.log(
-        "[Deriv] WebSocket closed",
+        "[Deriv] WebSocket closed:",
         {
           code: event.code,
           reason: event.reason,
-          wasClean: event.wasClean,
+          wasClean:
+            event.wasClean,
         }
       );
 
@@ -422,46 +425,20 @@ export class DerivDataManager {
     };
   }
 
-  /*
-   * DISCONNECT
-   */
   disconnect() {
     this.manuallyDisconnected = true;
 
     if (this.socket) {
-      const socket =
-        this.socket;
-
-      this.socket = null;
-
       try {
-        /*
-         * Stop live tick subscription
-         * before closing when possible.
-         */
-        if (
-          socket.readyState ===
-          WebSocket.OPEN
-        ) {
-          if (
-            this.currentSymbol
-          ) {
-            socket.send(
-              JSON.stringify({
-                forget_all:
-                  "ticks",
-              })
-            );
-          }
-        }
-
-        socket.close();
+        this.socket.close();
       } catch (error) {
         console.error(
           "[Deriv] Error closing socket:",
           error
         );
       }
+
+      this.socket = null;
     }
 
     this.setStatus(
@@ -526,23 +503,14 @@ export class DerivDataManager {
     };
   }
 
-  /*
-   * GET ANALYSIS ENGINE
-   */
   getEngine() {
     return this.engine;
   }
 
-  /*
-   * GET CURRENT TICK
-   */
   getCurrentTick() {
     return this.currentTick;
   }
 
-  /*
-   * GET CONNECTION STATUS
-   */
   getStatus() {
     if (
       this.socket &&
@@ -605,11 +573,6 @@ export class DerivDataManager {
       | "disconnected"
       | "error"
   ) {
-    console.log(
-      "[Deriv] Status:",
-      status
-    );
-
     this.statusListeners.forEach(
       (listener) => {
         try {
@@ -682,7 +645,8 @@ export class DerivDataManager {
   }
 
   /*
-   * GUESS HISTORICAL PIP SIZE
+   * DETERMINE DECIMAL PLACES
+   * FROM HISTORICAL PRICES
    */
   private guessPipSize(
     prices: number[]
@@ -696,8 +660,7 @@ export class DerivDataManager {
       );
 
     if (
-      sample ===
-      undefined
+      sample === undefined
     ) {
       return 2;
     }
@@ -708,7 +671,8 @@ export class DerivDataManager {
   }
 
   /*
-   * GUESS LIVE PIP SIZE
+   * DETERMINE DECIMAL PLACES
+   * FROM LIVE QUOTE
    */
   private guessPipSizeFromQuote(
     quote: number
@@ -723,8 +687,7 @@ export class DerivDataManager {
     }
 
     return (
-      text
-        .split(".")[1]
+      text.split(".")[1]
         ?.length ?? 0
     );
   }
