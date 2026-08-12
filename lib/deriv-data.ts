@@ -65,13 +65,12 @@ export class DerivDataManager {
     );
 
     /*
-     * Public Deriv market-data WebSocket.
+     * Deriv public WebSocket.
      *
-     * No authentication is required for
-     * public market data.
+     * App ID 1089 is included explicitly.
      */
     const socket = new WebSocket(
-      "wss://ws.binaryws.com/websockets/v3"
+      "wss://ws.binaryws.com/websockets/v3?app_id=1089"
     );
 
     this.socket = socket;
@@ -87,15 +86,15 @@ export class DerivDataManager {
       );
 
       /*
-       * The browser WebSocket is now open.
+       * The browser WebSocket connection
+       * has successfully opened.
        */
       this.setStatus("connected");
 
       /*
-       * Request server time.
-       *
-       * This gives us an actual response
-       * from Deriv.
+       * ================================
+       * SERVER TIME
+       * ================================
        */
       socket.send(
         JSON.stringify({
@@ -105,23 +104,12 @@ export class DerivDataManager {
       );
 
       /*
-       * Ask Deriv for the currently available
-       * symbols.
+       * ================================
+       * HISTORICAL TICKS
+       * ================================
        *
-       * This helps verify that the API is
-       * responding correctly.
-       */
-      socket.send(
-        JSON.stringify({
-          active_symbols: "brief",
-          product_type: "basic",
-          req_id: 2,
-        })
-      );
-
-      /*
-       * Request historical ticks for the
-       * selected market.
+       * Request the selected number of
+       * historical ticks for this market.
        */
       socket.send(
         JSON.stringify({
@@ -130,18 +118,23 @@ export class DerivDataManager {
           end: "latest",
           style: "ticks",
           subscribe: 0,
-          req_id: 3,
+          req_id: 2,
         })
       );
 
       /*
-       * Subscribe to NEW live ticks.
+       * ================================
+       * LIVE TICKS
+       * ================================
+       *
+       * Subscribe only to the selected
+       * market.
        */
       socket.send(
         JSON.stringify({
           ticks: symbol,
           subscribe: 1,
-          req_id: 4,
+          req_id: 3,
         })
       );
 
@@ -171,13 +164,15 @@ export class DerivDataManager {
         );
 
         /*
-         * SERVER TIME
+         * ================================
+         * SERVER TIME RESPONSE
+         * ================================
          */
         if (
           data.msg_type === "time"
         ) {
           console.log(
-            "[Deriv] Server responded to time request:",
+            "[Deriv] Server time:",
             data.time
           );
 
@@ -185,49 +180,12 @@ export class DerivDataManager {
         }
 
         /*
-         * ACTIVE SYMBOLS
-         */
-        if (
-          data.msg_type ===
-            "active_symbols" &&
-          Array.isArray(
-            data.active_symbols
-          )
-        ) {
-          console.log(
-            "[Deriv] Active symbols received:",
-            data.active_symbols.length
-          );
-
-          const selectedSymbol =
-            data.active_symbols.find(
-              (item: {
-                symbol?: string;
-              }) =>
-                item.symbol === symbol
-            );
-
-          if (selectedSymbol) {
-            console.log(
-              "[Deriv] Selected symbol confirmed:",
-              selectedSymbol
-            );
-          } else {
-            console.warn(
-              "[Deriv] Selected symbol was NOT found:",
-              symbol
-            );
-          }
-
-          return;
-        }
-
-        /*
+         * ================================
          * HISTORICAL TICKS
+         * ================================
          */
         if (
-          data.msg_type ===
-            "history" &&
+          data.msg_type === "history" &&
           data.history &&
           Array.isArray(
             data.history.prices
@@ -236,6 +194,9 @@ export class DerivDataManager {
           const prices =
             data.history.prices as number[];
 
+          /*
+           * Determine decimal precision.
+           */
           const pipSize =
             typeof data.pip_size ===
             "number"
@@ -244,6 +205,9 @@ export class DerivDataManager {
                   prices
                 );
 
+          /*
+           * Convert prices into digits.
+           */
           const digits =
             prices
               .map((price) =>
@@ -264,18 +228,21 @@ export class DerivDataManager {
               );
 
           /*
-           * Reset the engine.
+           * Reset analysis engine.
            */
           this.engine.clear();
 
           /*
-           * Add the selected number of
-           * historical digits.
+           * Keep only the selected
+           * analysis window.
            */
-          this.engine.addTicks(
+          const selectedDigits =
             digits.slice(
               -this.tickWindow
-            )
+            );
+
+          this.engine.addTicks(
+            selectedDigits
           );
 
           console.log(
@@ -285,7 +252,7 @@ export class DerivDataManager {
 
           console.log(
             "[Deriv] Historical digits:",
-            digits.length
+            selectedDigits.length
           );
 
           console.log(
@@ -294,24 +261,24 @@ export class DerivDataManager {
           );
 
           /*
-           * IMPORTANT:
-           *
-           * Send historical digits to
-           * page.tsx as well.
+           * Send historical digits
+           * to the dashboard.
            */
-          digits
-            .slice(-this.tickWindow)
-            .forEach((digit) => {
+          selectedDigits.forEach(
+            (digit) => {
               this.notifyDigitListeners(
                 digit
               );
-            });
+            }
+          );
 
           return;
         }
 
         /*
+         * ================================
          * LIVE TICK
+         * ================================
          */
         if (
           data.msg_type === "tick" &&
@@ -338,9 +305,7 @@ export class DerivDataManager {
                 "";
 
           /*
-           * pip_size is not guaranteed by
-           * the current API, so calculate
-           * it when necessary.
+           * Determine decimal precision.
            */
           const pipSize =
             typeof data.tick.pip_size ===
@@ -350,12 +315,18 @@ export class DerivDataManager {
                   quote
                 );
 
+          /*
+           * Extract the final digit.
+           */
           const digit =
             this.extractDigit(
               quote,
               pipSize
             );
 
+          /*
+           * Validate digit.
+           */
           if (
             !Number.isInteger(digit) ||
             digit < 0 ||
@@ -373,6 +344,9 @@ export class DerivDataManager {
             return;
           }
 
+          /*
+           * Create complete tick.
+           */
           const tick: DerivTick = {
             quote,
             epoch,
@@ -381,7 +355,8 @@ export class DerivDataManager {
           };
 
           /*
-           * Add to analysis engine.
+           * Add live digit to
+           * analysis engine.
            */
           this.engine.addTick(
             digit
@@ -393,15 +368,14 @@ export class DerivDataManager {
           );
 
           /*
-           * Send the complete tick.
+           * Notify tick listeners.
            */
           this.notifyTickListeners(
             tick
           );
 
           /*
-           * Send the digit to the
-           * dashboard.
+           * Notify digit listeners.
            */
           this.notifyDigitListeners(
             digit
@@ -411,7 +385,9 @@ export class DerivDataManager {
         }
 
         /*
-         * DERIV ERROR
+         * ================================
+         * DERIV API ERROR
+         * ================================
          */
         if (data.error) {
           console.error(
@@ -598,3 +574,153 @@ export class DerivDataManager {
         } catch (error) {
           console.error(
             "[Deriv] Digit listener error:",
+            error
+          );
+        }
+      }
+    );
+  }
+
+  /*
+   * ================================
+   * NOTIFY TICK LISTENERS
+   * ================================
+   */
+  private notifyTickListeners(
+    tick: DerivTick
+  ) {
+    this.tickListeners.forEach(
+      (listener) => {
+        try {
+          listener(tick);
+        } catch (error) {
+          console.error(
+            "[Deriv] Tick listener error:",
+            error
+          );
+        }
+      }
+    );
+  }
+
+  /*
+   * ================================
+   * SET STATUS
+   * ================================
+   */
+  private setStatus(
+    status: Status
+  ) {
+    this.statusListeners.forEach(
+      (listener) => {
+        try {
+          listener(status);
+        } catch (error) {
+          console.error(
+            "[Deriv] Status listener error:",
+            error
+          );
+        }
+      }
+    );
+  }
+
+  /*
+   * ================================
+   * EXTRACT DIGIT
+   * ================================
+   */
+  private extractDigit(
+    quote: number,
+    pipSize: number
+  ): number {
+    const decimals = Math.max(
+      0,
+      Math.min(
+        10,
+        Math.floor(pipSize)
+      )
+    );
+
+    const formatted =
+      quote.toFixed(decimals);
+
+    const lastCharacter =
+      formatted.charAt(
+        formatted.length - 1
+      );
+
+    const digit =
+      Number(lastCharacter);
+
+    if (
+      Number.isInteger(digit) &&
+      digit >= 0 &&
+      digit <= 9
+    ) {
+      return digit;
+    }
+
+    /*
+     * Fallback digit extraction.
+     */
+    const fallback =
+      Math.abs(
+        Math.floor(
+          quote *
+            Math.pow(
+              10,
+              decimals
+            )
+        )
+      ) % 10;
+
+    return fallback;
+  }
+
+  /*
+   * ================================
+   * GUESS PIP SIZE FROM HISTORY
+   * ================================
+   */
+  private guessPipSize(
+    prices: number[]
+  ): number {
+    const sample =
+      prices.find((price) =>
+        Number.isFinite(price)
+      );
+
+    if (
+      sample === undefined
+    ) {
+      return 2;
+    }
+
+    return this.guessPipSizeFromQuote(
+      sample
+    );
+  }
+
+  /*
+   * ================================
+   * GUESS PIP SIZE FROM QUOTE
+   * ================================
+   */
+  private guessPipSizeFromQuote(
+    quote: number
+  ): number {
+    const text = String(quote);
+
+    if (
+      !text.includes(".")
+    ) {
+      return 0;
+    }
+
+    return (
+      text.split(".")[1]?.length ??
+      0
+    );
+  }
+}
